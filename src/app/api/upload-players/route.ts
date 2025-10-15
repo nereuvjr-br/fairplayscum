@@ -32,7 +32,7 @@ export async function POST(request: Request) {
       // Jogador existe - atualizar
       const existingPlayer = existingPlayers.documents[0];
       const nameHistory = existingPlayer.nameHistory || [];
-      
+      let alreadyExists = true;
       // Adicionar nome ao histórico se for diferente do atual
       if (player !== existingPlayer.currentName) {
         if (!nameHistory.includes(existingPlayer.currentName)) {
@@ -42,7 +42,6 @@ export async function POST(request: Request) {
           nameHistory.push(player);
         }
       }
-
       await databases.updateDocument(
         databaseId,
         "players",
@@ -53,7 +52,8 @@ export async function POST(request: Request) {
           lastSeen: now,
         }
       );
-      isNew = false;
+      // Retornar erro informando que já existe, mas foi atualizado
+      return NextResponse.json({ success: false, error: "SteamID já existe, dados atualizados.", updated: true });
     } else {
       // Jogador novo - criar
       await databases.createDocument(

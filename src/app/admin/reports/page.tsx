@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAuth } from "@/lib/useAuth";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,34 +23,16 @@ export default function AdminReportsPage() {
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"pending" | "approved" | "all">("pending");
-  const [adminPassword, setAdminPassword] = useState("");
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-
-  // Senha simples de admin (em produção, usar autenticação real)
-  const ADMIN_PASSWORD = "admin123";
-
-  const handleLogin = () => {
-    if (adminPassword === ADMIN_PASSWORD) {
-      setIsAuthenticated(true);
-      localStorage.setItem("admin_auth", "true");
-    } else {
-      alert("Senha incorreta!");
-    }
-  };
+  const { user, loading: authLoading, login, logout, checkSession } = useAuth();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   useEffect(() => {
-    // Verificar se já está autenticado
-    const auth = localStorage.getItem("admin_auth");
-    if (auth === "true") {
-      setIsAuthenticated(true);
+    // Quando a auth estiver resolvida, buscar reports se estiver logado
+    if (!authLoading) {
+      if (user) fetchReports();
     }
-  }, []);
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchReports();
-    }
-  }, [filter, isAuthenticated]);
+  }, [filter, authLoading, user]);
 
   const fetchReports = async () => {
     setLoading(true);
@@ -121,7 +104,8 @@ export default function AdminReportsPage() {
     }
   };
 
-  if (!isAuthenticated) {
+  if (authLoading || (!user && !authLoading)) {
+    // Mostrar tela de login
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100 p-8">
         <div className="max-w-md mx-auto mt-20">
@@ -129,15 +113,22 @@ export default function AdminReportsPage() {
             <h1 className="text-2xl font-bold mb-6 text-center">🔐 Admin Login</h1>
             <div className="space-y-4">
               <input
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+              />
+              <input
                 type="password"
-                placeholder="Digite a senha de administrador"
-                value={adminPassword}
-                onChange={(e) => setAdminPassword(e.target.value)}
-                onKeyPress={(e) => e.key === "Enter" && handleLogin()}
+                placeholder="Senha"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyPress={(e) => e.key === "Enter" && login(email, password)}
                 className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
               />
               <Button
-                onClick={handleLogin}
+                onClick={() => login(email, password)}
                 className="w-full bg-cyan-600 hover:bg-cyan-700 text-white"
               >
                 Entrar
@@ -153,11 +144,18 @@ export default function AdminReportsPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100 p-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-red-400 to-red-600 bg-clip-text text-transparent">
-            🛡️ Painel de Moderação
-          </h1>
-          <p className="text-slate-400">Aprovação e gerenciamento de denúncias</p>
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-red-400 to-red-600 bg-clip-text text-transparent">
+              🛡️ Painel de Moderação
+            </h1>
+            <p className="text-slate-400">Aprovação e gerenciamento de denúncias</p>
+          </div>
+          <div>
+            <Button onClick={logout} variant="outline" size="sm" className="border-slate-700">
+              Sair
+            </Button>
+          </div>
         </div>
 
         {/* Filters */}

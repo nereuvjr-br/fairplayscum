@@ -33,6 +33,7 @@ interface FileUploadStatus {
   status: 'pending' | 'processing' | 'completed' | 'error';
   progress: number;
   stats: UploadStats;
+  totalPlayers?: number; // Total de jogadores encontrados no arquivo
   error?: string;
 }
 
@@ -106,7 +107,8 @@ const UploadPage: React.FC = () => {
       fileName: file.name,
       status: 'pending',
       progress: 0,
-      stats: { total: 0, new: 0, updated: 0, errors: 0 }
+      stats: { total: 0, new: 0, updated: 0, errors: 0 },
+      totalPlayers: 0
     }));
     setFileStatuses(initialStatuses);
 
@@ -124,6 +126,15 @@ const UploadPage: React.FC = () => {
           const text = await file.text();
           const data = parseLog(text);
           
+          console.log(`📄 Arquivo: ${file.name} - ${data.length} jogadores encontrados`);
+          
+          // Atualizar total de jogadores encontrados
+          setFileStatuses(prev => {
+            const updated = [...prev];
+            updated[fileIndex].totalPlayers = data.length;
+            return updated;
+          });
+          
           if (data.length === 0) {
             setFileStatuses(prev => {
               const updated = [...prev];
@@ -139,7 +150,8 @@ const UploadPage: React.FC = () => {
           let updatedPlayers = 0;
           let errors = 0;
 
-          // Processar jogadores em lotes de 5 simultaneamente
+          // Processar TODOS os jogadores do arquivo em lotes de 5 requisições simultâneas
+          // Isso evita sobrecarregar o servidor, mas processa todos os jogadores
           const batchSize = 5;
           for (let i = 0; i < data.length; i += batchSize) {
             const batch = data.slice(i, Math.min(i + batchSize, data.length));
@@ -294,13 +306,13 @@ const UploadPage: React.FC = () => {
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-2xl text-slate-100">Upload de Log</CardTitle>
+                <CardTitle className="text-2xl text-slate-100">Upload de Logs</CardTitle>
                 <CardDescription className="text-slate-400">
-                  Extraia dados de jogadores e sincronize com o banco de dados
+                  Processe múltiplos arquivos de log simultaneamente
                 </CardDescription>
               </div>
               <Badge variant="outline" className="text-cyan-400 border-cyan-400">
-                v2.0
+                v3.0 - Multi-Upload
               </Badge>
             </div>
           </CardHeader>
@@ -351,7 +363,9 @@ const UploadPage: React.FC = () => {
                     className="flex h-10 w-full rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-cyan-400 placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   />
                 </div>
-                <p className="text-xs text-slate-500">Você pode selecionar múltiplos arquivos</p>
+                <p className="text-xs text-slate-500">
+                  Você pode selecionar múltiplos arquivos. Todos os jogadores de cada arquivo serão processados.
+                </p>
               </div>
             </div>
 
@@ -406,25 +420,69 @@ const UploadPage: React.FC = () => {
               </div>
             )}
 
-            {/* File Info */}
-            {fileName && (
-              <div className="flex items-center gap-2 p-3 bg-slate-800 rounded-lg border border-slate-700">
-                <svg className="w-5 h-5 text-cyan-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <div className="flex-1 min-w-0">
-                  <p className="text-slate-300 text-sm truncate">{fileName}</p>
-                  {selectedServer && (
-                    <p className="text-slate-500 text-xs">
-                      {getSelectedServerInfo()?.name}
-                    </p>
-                  )}
-                </div>
-                {selectedServer && (
-                  <Badge variant="secondary" className="bg-cyan-500/20 text-cyan-400 border-0 flex-shrink-0">
-                    {getSelectedServerInfo()?.flag} {selectedServer}
-                  </Badge>
-                )}
+            {/* Files Status List */}
+            {fileStatuses.length > 0 && (
+              <div className="space-y-3">
+                <Label className="text-slate-200">Status dos Arquivos</Label>
+                {fileStatuses.map((fileStatus, index) => (
+                  <div key={index} className="p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        {fileStatus.status === 'pending' && (
+                          <div className="w-5 h-5 rounded-full border-2 border-slate-500 animate-pulse" />
+                        )}
+                        {fileStatus.status === 'processing' && (
+                          <div className="w-5 h-5 rounded-full border-2 border-cyan-500 border-t-transparent animate-spin" />
+                        )}
+                        {fileStatus.status === 'completed' && (
+                          <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                        {fileStatus.status === 'error' && (
+                          <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        )}
+                        <p className="text-slate-300 text-sm truncate">{fileStatus.fileName}</p>
+                      </div>
+                      <div className="text-xs text-slate-400 ml-2 flex items-center gap-2">
+                        {fileStatus.totalPlayers && fileStatus.totalPlayers > 0 && (
+                          <span className="text-cyan-400 font-medium">
+                            {fileStatus.totalPlayers} jogador{fileStatus.totalPlayers !== 1 ? 'es' : ''}
+                          </span>
+                        )}
+                        {fileStatus.status === 'pending' && <span>Aguardando...</span>}
+                        {fileStatus.status === 'processing' && <span>{Math.round(fileStatus.progress)}%</span>}
+                        {fileStatus.status === 'completed' && <span className="text-green-400">✓ Concluído</span>}
+                        {fileStatus.status === 'error' && <span className="text-red-400">{fileStatus.error}</span>}
+                      </div>
+                    </div>
+                    
+                    {fileStatus.status === 'processing' && (
+                      <Progress value={fileStatus.progress} className="h-1 mb-2" />
+                    )}
+                    
+                    {(fileStatus.status === 'processing' || fileStatus.status === 'completed') && fileStatus.stats.total > 0 && (
+                      <div className="flex gap-3 text-xs mt-2">
+                        <span className="text-slate-400">
+                          Total: <span className="text-cyan-400">{fileStatus.stats.total}</span>
+                        </span>
+                        <span className="text-slate-400">
+                          Novos: <span className="text-green-400">{fileStatus.stats.new}</span>
+                        </span>
+                        <span className="text-slate-400">
+                          Atualizados: <span className="text-blue-400">{fileStatus.stats.updated}</span>
+                        </span>
+                        {fileStatus.stats.errors > 0 && (
+                          <span className="text-slate-400">
+                            Erros: <span className="text-red-400">{fileStatus.stats.errors}</span>
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
           </CardContent>
