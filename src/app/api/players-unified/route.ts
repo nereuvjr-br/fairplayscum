@@ -27,7 +27,7 @@ export async function GET(request: Request) {
 
     // Buscar dados da Steam para cada player
     const playersWithData = await Promise.all(
-      playersResponse.documents.map(async (player: any) => {
+      playersResponse.documents.map(async (player: { steamid: string; }) => {
         // Buscar dados de perfil Steam
         let steamData = null;
         try {
@@ -124,10 +124,11 @@ export async function GET(request: Request) {
       players: filteredPlayers,
       total: filteredPlayers.length,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching unified players data:", error);
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }

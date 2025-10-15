@@ -69,10 +69,11 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({ success: true, players: players.documents, total: players.total });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching players:", error);
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }

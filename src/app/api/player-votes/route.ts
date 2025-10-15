@@ -111,7 +111,7 @@ export async function POST(request: Request) {
       total: allVotes.total,
     };
 
-    allVotes.documents.forEach((vote: any) => {
+    allVotes.documents.forEach((vote: { voteType: string; }) => {
       if (vote.voteType === "like") stats.likes++;
       else if (vote.voteType === "dislike") stats.dislikes++;
       else if (vote.voteType === "neutral") stats.neutral++;
@@ -123,10 +123,11 @@ export async function POST(request: Request) {
       stats,
       userVote: voteType,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error voting:", error);
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }
@@ -163,7 +164,7 @@ export async function GET(request: Request) {
       total: allVotes.total,
     };
 
-    allVotes.documents.forEach((vote: any) => {
+    allVotes.documents.forEach((vote: { voteType: string; }) => {
       if (vote.voteType === "like") stats.likes++;
       else if (vote.voteType === "dislike") stats.dislikes++;
       else if (vote.voteType === "neutral") stats.neutral++;
@@ -192,10 +193,11 @@ export async function GET(request: Request) {
       stats,
       userVote,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error getting votes:", error);
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }

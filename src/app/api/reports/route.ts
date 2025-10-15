@@ -18,7 +18,7 @@ export async function GET(request: Request) {
 
   try {
     // Construir queries
-    const queries: any[] = [
+    const queries: string[] = [
       Query.orderDesc("$createdAt"),
       Query.limit(limit),
     ];
@@ -36,7 +36,7 @@ export async function GET(request: Request) {
 
     // Buscar dados dos jogadores para cada voto
     const reportsWithPlayerData = await Promise.all(
-      votes.documents.map(async (vote: any) => {
+      votes.documents.map(async (vote: { $id: string; steamid: string; voteType: string; reason: string; clips: string; createdAt: string; updatedAt: string; }) => {
         try {
           // Buscar dados do player
           const playerData = await databases.listDocuments(
@@ -72,7 +72,7 @@ export async function GET(request: Request) {
           if (vote.clips) {
             try {
               clips = JSON.parse(vote.clips);
-            } catch (e) {
+            } catch {
               clips = [];
             }
           }
@@ -86,23 +86,23 @@ export async function GET(request: Request) {
             createdAt: vote.createdAt,
             updatedAt: vote.updatedAt,
             player: player ? {
-              currentName: (player as any).currentName,
-              nameHistory: (player as any).nameHistory || [],
-              firstSeen: (player as any).firstSeen,
-              lastSeen: (player as any).lastSeen,
+              currentName: (player as { currentName: string; }).currentName,
+              nameHistory: (player as { nameHistory: string[]; }).nameHistory || [],
+              firstSeen: (player as { firstSeen: string; }).firstSeen,
+              lastSeen: (player as { lastSeen: string; }).lastSeen,
             } : null,
             steamData: steamData ? {
-              personaname: (steamData as any).personaname,
-              avatar: (steamData as any).avatar,
-              profileurl: (steamData as any).profileurl,
-              communityvisibilitystate: (steamData as any).communityvisibilitystate,
+              personaname: (steamData as { personaname: string; }).personaname,
+              avatar: (steamData as { avatar: string; }).avatar,
+              profileurl: (steamData as { profileurl: string; }).profileurl,
+              communityvisibilitystate: (steamData as { communityvisibilitystate: number; }).communityvisibilitystate,
             } : null,
             steamBans: steamBans ? {
-              VACBanned: (steamBans as any).VACBanned,
-              NumberOfVACBans: (steamBans as any).NumberOfVACBans,
-              CommunityBanned: (steamBans as any).CommunityBanned,
-              NumberOfGameBans: (steamBans as any).NumberOfGameBans,
-              DaysSinceLastBan: (steamBans as any).DaysSinceLastBan,
+              VACBanned: (steamBans as { VACBanned: boolean; }).VACBanned,
+              NumberOfVACBans: (steamBans as { NumberOfVACBans: number; }).NumberOfVACBans,
+              CommunityBanned: (steamBans as { CommunityBanned: boolean; }).CommunityBanned,
+              NumberOfGameBans: (steamBans as { NumberOfGameBans: number; }).NumberOfGameBans,
+              DaysSinceLastBan: (steamBans as { DaysSinceLastBan: number; }).DaysSinceLastBan,
             } : null,
           };
         } catch (error) {
@@ -142,10 +142,11 @@ export async function GET(request: Request) {
       reports: filteredReports,
       total: filteredReports.length,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching reports:", error);
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }

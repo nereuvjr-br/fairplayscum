@@ -79,12 +79,12 @@ export async function GET(
     }
 
     // Processar apenas denúncias aprovadas para exibição
-    const reports = approvedDenunciations.documents.map((vote: any) => {
+    const reports = approvedDenunciations.documents.map((vote: { $id: string; steamid: string; voteType: string; reason: string; clips: string; createdAt: string; updatedAt: string; approved: boolean; approvedBy: string; approvedAt: string; }) => {
       let clips = [];
       if (vote.clips) {
         try {
           clips = JSON.parse(vote.clips);
-        } catch (e) {
+        } catch {
           clips = [];
         }
       }
@@ -108,7 +108,7 @@ export async function GET(
       total: allDenunciations.total,
       totalApproved: approvedDenunciations.total,
       totalPending: allDenunciations.total - approvedDenunciations.total,
-      withClips: allDenunciations.documents.filter((d: any) => {
+      withClips: allDenunciations.documents.filter((d: { clips: string; }) => {
         try {
           const clips = d.clips ? JSON.parse(d.clips) : [];
           return clips && (clips.youtube?.length > 0 || clips.medal?.length > 0);
@@ -122,32 +122,33 @@ export async function GET(
       success: true,
       steamid,
       player: player ? {
-        currentName: (player as any).currentName,
-        nameHistory: (player as any).nameHistory || [],
-        firstSeen: (player as any).firstSeen,
-        lastSeen: (player as any).lastSeen,
+        currentName: (player as { currentName: string; }).currentName,
+        nameHistory: (player as { nameHistory: string[]; }).nameHistory || [],
+        firstSeen: (player as { firstSeen: string; }).firstSeen,
+        lastSeen: (player as { lastSeen: string; }).lastSeen,
       } : null,
       steamData: steamData ? {
-        personaname: (steamData as any).personaname,
-        avatar: (steamData as any).avatar,
-        avatarfull: (steamData as any).avatarfull,
-        profileurl: (steamData as any).profileurl,
-        communityvisibilitystate: (steamData as any).communityvisibilitystate,
+        personaname: (steamData as { personaname: string; }).personaname,
+        avatar: (steamData as { avatar: string; }).avatar,
+        avatarfull: (steamData as { avatarfull: string; }).avatarfull,
+        profileurl: (steamData as { profileurl: string; }).profileurl,
+        communityvisibilitystate: (steamData as { communityvisibilitystate: number; }).communityvisibilitystate,
       } : null,
       steamBans: steamBans ? {
-        VACBanned: (steamBans as any).VACBanned,
-        NumberOfVACBans: (steamBans as any).NumberOfVACBans,
-        CommunityBanned: (steamBans as any).CommunityBanned,
-        NumberOfGameBans: (steamBans as any).NumberOfGameBans,
-        DaysSinceLastBan: (steamBans as any).DaysSinceLastBan,
+        VACBanned: (steamBans as { VACBanned: boolean; }).VACBanned,
+        NumberOfVACBans: (steamBans as { NumberOfVACBans: number; }).NumberOfVACBans,
+        CommunityBanned: (steamBans as { CommunityBanned: boolean; }).CommunityBanned,
+        NumberOfGameBans: (steamBans as { NumberOfGameBans: number; }).NumberOfGameBans,
+        DaysSinceLastBan: (steamBans as { DaysSinceLastBan: number; }).DaysSinceLastBan,
       } : null,
       reports,
       stats,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching player reports:", error);
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }
