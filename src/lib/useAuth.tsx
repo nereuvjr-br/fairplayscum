@@ -22,11 +22,14 @@ export function useAuth() {
       const data = await res.json();
       if (data.success && data.user) {
         setUser(data.user);
+        console.log('[useAuth] Sessão carregada:', data.user);
       } else {
         setUser(null);
+        console.log('[useAuth] Sessão não encontrada ou inválida');
       }
     } catch (error) {
       setUser(null);
+      console.log('[useAuth] Erro ao verificar sessão:', error);
     } finally {
       setLoading(false);
     }
@@ -39,8 +42,8 @@ export function useAuth() {
       body: JSON.stringify({ email, password })
     });
     const data = await res.json();
-    if (data.success && data.session) {
-      // depois de criar a sessão no servidor, buscar usuário
+    // Considera login bem-sucedido se data.success for true
+    if (data.success) {
       await checkSession();
       return { success: true };
     }

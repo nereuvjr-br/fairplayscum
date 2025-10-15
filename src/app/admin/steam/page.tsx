@@ -3,7 +3,8 @@ import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
+import { useAuth } from "@/lib/useAuth";
+import { useRouter } from "next/navigation";
 
 interface Player {
   $id: string;
@@ -16,24 +17,9 @@ interface Player {
   hasBans?: boolean;
 }
 
-interface SteamData {
-  steamid: string;
-  personaname?: string;
-  avatar?: string;
-  profileurl?: string;
-  lastUpdated?: string;
-}
-
-interface SteamBans {
-  steamid: string;
-  VACBanned?: boolean;
-  NumberOfVACBans?: number;
-  CommunityBanned?: boolean;
-  NumberOfGameBans?: number;
-  lastUpdated?: string;
-}
-
-const SteamDataPage: React.FC = () => {
+const AdminSteamDataPage: React.FC = () => {
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
   const [players, setPlayers] = useState<Player[]>([]);
   const [selectedPlayers, setSelectedPlayers] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -45,18 +31,26 @@ const SteamDataPage: React.FC = () => {
   const [showQueried, setShowQueried] = useState(false);
 
   useEffect(() => {
-    loadPlayers();
-    loadQueueStats();
-    const interval = setInterval(loadQueueStats, 5000);
-    return () => clearInterval(interval);
-  }, [showQueried]);
+    if (!authLoading && !user) {
+      router.replace("/admin/login");
+    }
+  }, [user, authLoading, router]);
 
   useEffect(() => {
-    if (autoProcess) {
+    if (user) {
+      loadPlayers();
+      loadQueueStats();
+      const interval = setInterval(loadQueueStats, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [showQueried, user]);
+
+  useEffect(() => {
+    if (autoProcess && user) {
       const interval = setInterval(processNext, 30000 + Math.random() * 10000); // 30-40s
       return () => clearInterval(interval);
     }
-  }, [autoProcess]);
+  }, [autoProcess, user]);
 
   const loadPlayers = async () => {
     try {
@@ -118,7 +112,6 @@ const SteamDataPage: React.FC = () => {
       return;
     }
 
-    // Filtrar jogadores já consultados
     const selectedPlayersList = Array.from(selectedPlayers);
     const playersToQueue = players.filter(p => 
       selectedPlayersList.includes(p.steamid) && 
@@ -147,7 +140,9 @@ const SteamDataPage: React.FC = () => {
         alert(`${data.queued} consultas adicionadas à fila`);
         loadQueueStats();
         deselectAll();
-        await loadPlayers(); // Recarregar lista
+        await loadPlayers();
+      } else {
+        alert("Erro ao adicionar à fila: " + data.error);
       }
     } catch (error) {
       console.error("Erro ao adicionar à fila:", error);
@@ -166,19 +161,23 @@ const SteamDataPage: React.FC = () => {
     }
   };
 
+  if (authLoading || !user) {
+    return <p className="text-center p-8">Carregando...</p>;
+  }
+
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-4 md:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
         <div className="text-center space-y-3 mb-8">
           <div className="flex items-center justify-between mb-4">
             <div className="flex gap-2">
-              <Button onClick={() => window.location.href = '/upload'} variant="outline" size="sm" className="border-slate-600 text-slate-200 hover:bg-slate-800">
+              <Button onClick={() => router.push('/admin/upload')} variant="outline" size="sm" className="border-slate-600 text-slate-200 hover:bg-slate-800">
                 📤 Upload de Logs
               </Button>
-              <Button onClick={() => window.location.href = '/players'} variant="outline" size="sm" className="border-slate-600 text-slate-200 hover:bg-slate-800">
+              <Button onClick={() => router.push('/players')} variant="outline" size="sm" className="border-slate-600 text-slate-200 hover:bg-slate-800">
                 👥 Base de Jogadores
               </Button>
-              <Button onClick={() => window.location.href = '/queue'} variant="outline" size="sm" className="border-slate-600 text-slate-200 hover:bg-slate-800">
+              <Button onClick={() => router.push('/admin/queue')} variant="outline" size="sm" className="border-slate-600 text-slate-200 hover:bg-slate-800">
                 📋 Gerenciar Fila
               </Button>
             </div>
@@ -192,7 +191,6 @@ const SteamDataPage: React.FC = () => {
           </p>
         </div>
 
-        {/* Queue Stats */}
         <Card className="border-slate-800 bg-slate-900/50 backdrop-blur">
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -234,7 +232,6 @@ const SteamDataPage: React.FC = () => {
           </CardContent>
         </Card>
 
-        {/* Control Panel */}
         <Card className="border-slate-800 bg-slate-900/50 backdrop-blur">
           <CardHeader>
             <CardTitle className="text-slate-100">Selecionar Jogadores</CardTitle>
@@ -243,7 +240,6 @@ const SteamDataPage: React.FC = () => {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Search Bar */}
             <div className="flex gap-3">
               <input
                 type="text"
@@ -300,7 +296,6 @@ const SteamDataPage: React.FC = () => {
           </CardContent>
         </Card>
 
-        {/* Players List */}
         <Card className="border-slate-800 bg-slate-900/50 backdrop-blur">
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -392,4 +387,4 @@ const SteamDataPage: React.FC = () => {
   );
 };
 
-export default SteamDataPage;
+export default AdminSteamDataPage;

@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/lib/useAuth";
+import { useRouter } from "next/navigation";
 
 interface QueueItem {
   $id: string;
@@ -26,7 +28,9 @@ interface Stats {
   total: number;
 }
 
-export default function QueueManagement() {
+export default function AdminQueueManagement() {
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
   const [items, setItems] = useState<QueueItem[]>([]);
   const [stats, setStats] = useState<Stats>({
     pending: 0,
@@ -41,6 +45,12 @@ export default function QueueManagement() {
   const [autoProcess, setAutoProcess] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [lastProcessTime, setLastProcessTime] = useState<Date | null>(null);
+
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.replace("/admin/login");
+    }
+  }, [user, authLoading, router]);
 
   const loadQueue = async () => {
     try {
@@ -144,12 +154,14 @@ export default function QueueManagement() {
   };
 
   useEffect(() => {
-    loadQueue();
-    loadStats();
-  }, [filter]);
+    if (user) {
+      loadQueue();
+      loadStats();
+    }
+  }, [filter, user]);
 
   useEffect(() => {
-    if (!autoRefresh) return;
+    if (!autoRefresh || !user) return;
 
     const interval = setInterval(() => {
       loadQueue();
@@ -157,11 +169,11 @@ export default function QueueManagement() {
     }, 5000); // Atualiza a cada 5 segundos
 
     return () => clearInterval(interval);
-  }, [autoRefresh, filter]);
+  }, [autoRefresh, filter, user]);
 
   // Sistema de processamento automático
   useEffect(() => {
-    if (!autoProcess) return;
+    if (!autoProcess || !user) return;
 
     let isRunning = true;
 
@@ -207,7 +219,7 @@ export default function QueueManagement() {
       isRunning = false;
       setProcessing(false);
     };
-  }, [autoProcess]);
+  }, [autoProcess, user]);
 
   const toggleAutoProcess = () => {
     setAutoProcess(!autoProcess);
@@ -257,6 +269,10 @@ export default function QueueManagement() {
     return date.toLocaleString("pt-BR");
   };
 
+  if (authLoading || !user) {
+    return <p className="text-center p-8">Carregando...</p>;
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-8">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -267,13 +283,13 @@ export default function QueueManagement() {
             <p className="text-slate-400 mt-1">Controle total sobre as consultas Steam</p>
           </div>
           <div className="flex gap-2 items-center">
-            <Button onClick={() => window.location.href = '/upload'} variant="outline" size="sm">
+            <Button onClick={() => router.push('/admin/upload')} variant="outline" size="sm">
               📤 Upload de Logs
             </Button>
-            <Button onClick={() => window.location.href = '/players'} variant="outline" size="sm">
+            <Button onClick={() => router.push('/players')} variant="outline" size="sm">
               👥 Base de Jogadores
             </Button>
-            <Button onClick={() => window.location.href = '/steam'} variant="outline" size="sm">
+            <Button onClick={() => router.push('/admin/steam')} variant="outline" size="sm">
               🔍 Consultar Steam
             </Button>
             <label className="flex items-center gap-2 text-sm text-slate-300">

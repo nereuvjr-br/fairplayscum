@@ -11,10 +11,13 @@ export async function POST(request: Request) {
     client.setEndpoint(endpoint).setProject(projectId).setKey(apiKey);
     const account = new Account(client);
 
-    // Excluir sessão atual (logout)
-    await account.deleteSessions();
+    // Tentar excluir sessões no Appwrite (se aplicável)
+    try { await account.deleteSessions(); } catch (e) { /* non-fatal */ }
 
-    return NextResponse.json({ success: true });
+    const res = NextResponse.json({ success: true });
+    // limpar cookie
+    res.headers.set('Set-Cookie', `scum_auth=; Path=/; HttpOnly; SameSite=Lax; Expires=Thu, 01 Jan 1970 00:00:00 GMT`);
+    return res;
   } catch (error: any) {
     console.error("Logout error:", error);
     return NextResponse.json({ success: false, error: error.message || String(error) }, { status: 500 });

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/useAuth";
+import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,13 +25,20 @@ export default function AdminReportsPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"pending" | "approved" | "all">("pending");
   const { user, loading: authLoading, login, logout, checkSession } = useAuth();
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
   useEffect(() => {
+    console.log('[AdminReports] user:', user, 'authLoading:', authLoading);
+    // Redireciona para login só se authLoading for false e user for null
+    if (!authLoading && (!user || !user.$id)) {
+      router.replace('/admin/login');
+      return;
+    }
     // Quando a auth estiver resolvida, buscar reports se estiver logado
-    if (!authLoading) {
-      if (user) fetchReports();
+    if (!authLoading && user) {
+      fetchReports();
     }
   }, [filter, authLoading, user]);
 
@@ -104,40 +112,12 @@ export default function AdminReportsPage() {
     }
   };
 
-  if (authLoading || (!user && !authLoading)) {
-    // Mostrar tela de login
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100 p-8">
-        <div className="max-w-md mx-auto mt-20">
-          <Card className="bg-slate-900/50 border-slate-800 p-8">
-            <h1 className="text-2xl font-bold mb-6 text-center">🔐 Admin Login</h1>
-            <div className="space-y-4">
-              <input
-                type="email"
-                placeholder="Email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-              />
-              <input
-                type="password"
-                placeholder="Senha"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyPress={(e) => e.key === "Enter" && login(email, password)}
-                className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-              />
-              <Button
-                onClick={() => login(email, password)}
-                className="w-full bg-cyan-600 hover:bg-cyan-700 text-white"
-              >
-                Entrar
-              </Button>
-            </div>
-          </Card>
-        </div>
-      </div>
-    );
+  if (authLoading) {
+    return <div className="p-8 text-slate-400">Verificando sessão...</div>;
+  }
+  if (!user) {
+    if (typeof window !== 'undefined') window.location.href = '/admin/login';
+    return null;
   }
 
   return (

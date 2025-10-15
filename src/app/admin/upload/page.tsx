@@ -6,6 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { useAuth } from "@/lib/useAuth";
+import { useRouter } from "next/navigation";
 
 interface LogData {
   player: string;
@@ -51,7 +53,9 @@ function parseLog(content: string): LogData[] {
   return Array.from(steamidMap.values());
 }
 
-const UploadPage: React.FC = () => {
+const AdminUploadPage: React.FC = () => {
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
   const [jsonResult, setJsonResult] = useState<LogData[] | null>(null);
   const [selectedServer, setSelectedServer] = useState<string>("");
   const [uploading, setUploading] = useState(false);
@@ -63,10 +67,17 @@ const UploadPage: React.FC = () => {
   const [currentProcessing, setCurrentProcessing] = useState<string>("");
   const [fileStatuses, setFileStatuses] = useState<FileUploadStatus[]>([]);
 
-  // Carregar servidores ao montar o componente
   useEffect(() => {
-    loadServers();
-  }, []);
+    if (!authLoading && !user) {
+      router.replace("/admin/login");
+    }
+  }, [user, authLoading, router]);
+
+  useEffect(() => {
+    if (user) {
+      loadServers();
+    }
+  }, [user]);
 
   const loadServers = async () => {
     try {
@@ -102,7 +113,6 @@ const UploadPage: React.FC = () => {
 
     const selectedServerData = servers.find(s => s.serverId === selectedServer);
 
-    // Inicializar status de cada arquivo
     const initialStatuses: FileUploadStatus[] = Array.from(files).map(file => ({
       fileName: file.name,
       status: 'pending',
@@ -113,10 +123,8 @@ const UploadPage: React.FC = () => {
     setFileStatuses(initialStatuses);
 
     try {
-      // Processar todos os arquivos simultaneamente
       const filePromises = Array.from(files).map(async (file, fileIndex) => {
         try {
-          // Atualizar status para processing
           setFileStatuses(prev => {
             const updated = [...prev];
             updated[fileIndex].status = 'processing';
@@ -126,9 +134,6 @@ const UploadPage: React.FC = () => {
           const text = await file.text();
           const data = parseLog(text);
           
-          console.log(`📄 Arquivo: ${file.name} - ${data.length} jogadores encontrados`);
-          
-          // Atualizar total de jogadores encontrados
           setFileStatuses(prev => {
             const updated = [...prev];
             updated[fileIndex].totalPlayers = data.length;
@@ -150,8 +155,6 @@ const UploadPage: React.FC = () => {
           let updatedPlayers = 0;
           let errors = 0;
 
-          // Processar TODOS os jogadores do arquivo em lotes de 5 requisições simultâneas
-          // Isso evita sobrecarregar o servidor, mas processa todos os jogadores
           const batchSize = 5;
           for (let i = 0; i < data.length; i += batchSize) {
             const batch = data.slice(i, Math.min(i + batchSize, data.length));
@@ -187,7 +190,6 @@ const UploadPage: React.FC = () => {
               })
             );
 
-            // Atualizar progresso do arquivo
             const processed = Math.min(i + batchSize, data.length);
             const fileProgress = (processed / total) * 100;
             
@@ -204,7 +206,6 @@ const UploadPage: React.FC = () => {
             });
           }
 
-          // Marcar arquivo como concluído
           setFileStatuses(prev => {
             const updated = [...prev];
             updated[fileIndex].status = 'completed';
@@ -225,7 +226,6 @@ const UploadPage: React.FC = () => {
 
       await Promise.all(filePromises);
 
-      // Calcular estatísticas totais
       setStats(prev => {
         const totalStats = initialStatuses.reduce((acc, status) => ({
           total: acc.total + status.stats.total,
@@ -265,29 +265,27 @@ const UploadPage: React.FC = () => {
     setFileStatuses([]);
     setStats({ total: 0, new: 0, updated: 0, errors: 0 });
     setCurrentProcessing("");
-    // Reset file input
     const fileInput = document.getElementById('file-upload') as HTMLInputElement;
     if (fileInput) fileInput.value = '';
   };
 
-  const getSelectedServerInfo = () => {
-    return servers.find(s => s.serverId === selectedServer);
-  };
+  if (authLoading || !user) {
+    return <p className="text-center p-8">Carregando...</p>;
+  }
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-4 md:p-8">
       <div className="max-w-5xl mx-auto space-y-6">
-        {/* Header */}
-          <div className="text-center space-y-3 mb-8">
+        <div className="text-center space-y-3 mb-8">
           <div className="flex items-center justify-between mb-4">
             <div className="flex gap-2">
-              <Button onClick={() => window.location.href = '/players'} variant="outline" size="sm" className="border-slate-600 text-slate-200 hover:bg-slate-800">
+              <Button onClick={() => router.push('/players')} variant="outline" size="sm" className="border-slate-600 text-slate-200 hover:bg-slate-800">
                 👥 Base de Jogadores
               </Button>
-              <Button onClick={() => window.location.href = '/steam'} variant="outline" size="sm" className="border-slate-600 text-slate-200 hover:bg-slate-800">
+              <Button onClick={() => router.push('/admin/steam')} variant="outline" size="sm" className="border-slate-600 text-slate-200 hover:bg-slate-800">
                 🔍 Consultar Steam
               </Button>
-              <Button onClick={() => window.location.href = '/queue'} variant="outline" size="sm" className="border-slate-600 text-slate-200 hover:bg-slate-800">
+              <Button onClick={() => router.push('/admin/queue')} variant="outline" size="sm" className="border-slate-600 text-slate-200 hover:bg-slate-800">
                 📋 Gerenciar Fila
               </Button>
             </div>
@@ -301,7 +299,6 @@ const UploadPage: React.FC = () => {
           </p>
         </div>
 
-        {/* Main Upload Card */}
         <Card className="border-slate-800 bg-slate-900/50 backdrop-blur">
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -318,7 +315,6 @@ const UploadPage: React.FC = () => {
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="grid md:grid-cols-2 gap-6">
-              {/* Server Select */}
               <div className="space-y-2">
                 <Label htmlFor="server-select" className="text-slate-200 text-base font-medium">
                   Servidor
@@ -347,7 +343,6 @@ const UploadPage: React.FC = () => {
                 </Select>
               </div>
 
-              {/* File Upload */}
               <div className="space-y-2">
                 <Label htmlFor="file-upload" className="text-slate-200 text-base font-medium">
                   Arquivos de Log
@@ -369,7 +364,6 @@ const UploadPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Processing Status */}
             {uploading && (
               <div className="space-y-3">
                 <div className="flex justify-between text-sm">
@@ -378,7 +372,6 @@ const UploadPage: React.FC = () => {
                 </div>
                 <Progress value={uploadProgress} className="h-2" />
                 
-                {/* Stats Grid */}
                 {stats.total > 0 && (
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2">
                     <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700">
@@ -402,7 +395,6 @@ const UploadPage: React.FC = () => {
               </div>
             )}
 
-            {/* Success Message */}
             {uploadSuccess && (
               <div className="flex items-center gap-3 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
                 <div className="flex-shrink-0 w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center">
@@ -420,7 +412,6 @@ const UploadPage: React.FC = () => {
               </div>
             )}
 
-            {/* Files Status List */}
             {fileStatuses.length > 0 && (
               <div className="space-y-3">
                 <Label className="text-slate-200">Status dos Arquivos</Label>
@@ -488,7 +479,6 @@ const UploadPage: React.FC = () => {
           </CardContent>
         </Card>
 
-        {/* Results Card */}
         {jsonResult && jsonResult.length > 0 && (
           <Card className="border-slate-800 bg-slate-900/50 backdrop-blur animate-in fade-in slide-in-from-bottom-4 duration-500">
             <CardHeader>
@@ -505,7 +495,6 @@ const UploadPage: React.FC = () => {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Player Cards Grid */}
               <div className="grid md:grid-cols-2 gap-3 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
                 {jsonResult.map((player, index) => (
                   <div
@@ -525,7 +514,6 @@ const UploadPage: React.FC = () => {
                 ))}
               </div>
 
-              {/* JSON Preview */}
               <details className="group">
                 <summary className="cursor-pointer text-sm text-slate-400 hover:text-cyan-400 transition-colors list-none flex items-center gap-2">
                   <svg className="w-4 h-4 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -538,7 +526,6 @@ const UploadPage: React.FC = () => {
                 </pre>
               </details>
 
-              {/* Action Buttons */}
               <div className="flex gap-3 pt-2">
                 <Button onClick={downloadJSON} className="flex-1 bg-cyan-600 hover:bg-cyan-700 text-white">
                   <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -557,7 +544,6 @@ const UploadPage: React.FC = () => {
           </Card>
         )}
 
-        {/* Info Footer */}
         <div className="text-center text-slate-500 text-sm space-y-1">
           <p>💡 Dica: Os logs são processados localmente e enviados diretamente para o banco de dados</p>
           <p className="text-xs">Suporte para arquivos .log e .txt</p>
@@ -584,4 +570,4 @@ const UploadPage: React.FC = () => {
   );
 };
 
-export default UploadPage;
+export default AdminUploadPage;
