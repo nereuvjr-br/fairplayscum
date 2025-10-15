@@ -22,61 +22,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-
-interface Server {
-  serverId: string;
-  serverName: string;
-  serverRegion: string;
-  serverFlag: string;
-}
-
-interface SteamData {
-  personaname: string;
-  profileurl: string;
-  avatar: string;
-  communityvisibilitystate: number;
-  lastUpdated: string;
-}
-
-interface SteamBans {
-  VACBanned: boolean;
-  NumberOfVACBans: number;
-  CommunityBanned: boolean;
-  NumberOfGameBans: number;
-  DaysSinceLastBan: number;
-  EconomyBan: string;
-  lastUpdated: string;
-}
-
-interface Player {
-  $id: string;
-  steamid: string;
-  currentName: string;
-  nameHistory: string[];
-  firstSeen: string;
-  lastSeen: string;
-  steamData?: SteamData | null;
-  steamBans?: SteamBans | null;
-  lastServer?: Server | null;
-  votes?: {
-    likes: number;
-    dislikes: number;
-    neutral: number;
-    total: number;
-    userVote?: string | null;
-  };
-}
-
-interface ServerOption {
-  $id: string;
-  name: string;
-  region: string;
-  flag: string;
-}
+import { EnrichedPlayer, Server, SteamBans } from "@/types";
 
 export default function PlayersUnifiedPage() {
-  const [players, setPlayers] = useState<Player[]>([]);
-  const [servers, setServers] = useState<ServerOption[]>([]);
+  const [players, setPlayers] = useState<EnrichedPlayer[]>([]);
+  const [servers, setServers] = useState<Server[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState<number>(1);
   const [limit, setLimit] = useState<number>(50);
@@ -117,6 +67,7 @@ export default function PlayersUnifiedPage() {
       const qLimit = overrides?.limit ?? limit;
       params.append("page", String(qPage));
       params.append("limit", String(qLimit));
+      if (voterId) params.append("voterId", voterId);
 
   const res = await fetch(`/api/players-unified?${params}`);
       const data = await res.json();
@@ -135,11 +86,9 @@ export default function PlayersUnifiedPage() {
     } finally {
       setLoading(false);
     }
-  }, [search, selectedServer, voterId]);
+  }, [page, limit, search, selectedServer, voterId]);
 
   useEffect(() => {
-    // run once on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     const loadServers = async () => {
       try {
         const res = await fetch("/api/servers");
@@ -153,15 +102,28 @@ export default function PlayersUnifiedPage() {
     };
 
     loadServers();
-    // initial load using current page/limit
-    loadPlayers({ page, limit });
-    // empty deps: only run once
   }, []);
 
   // Reset to first page when search or server changes
   useEffect(() => {
     setPage(1);
   }, [search, selectedServer, filterBanned]);
+
+
+  // Debounce searches/filters (keep page reset to 1 in a separate effect)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (voterId) {
+        loadPlayers({ page: 1, limit });
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [search, selectedServer, voterId, limit, loadPlayers]);
+
+  // Load when page or limit change (immediate)
+  useEffect(() => {
+    loadPlayers({ page, limit });
+  }, [page, limit, loadPlayers]);
 
   const handleVote = (steamid: string, name: string, voteType: 'like' | 'dislike' | 'neutral') => {
     setSelectedPlayerForVote({ steamid, name });
@@ -226,22 +188,6 @@ export default function PlayersUnifiedPage() {
       setSubmittingVote(false);
     }
   };
-
-  // Debounce searches/filters (keep page reset to 1 in a separate effect)
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (voterId) {
-        // Reset to first page; page effect will trigger loadPlayers
-        setPage(1);
-      }
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [search, selectedServer, voterId]);
-
-  // Load when page or limit change (immediate)
-  useEffect(() => {
-    loadPlayers({ page, limit });
-  }, [page, limit]);
 
   const getSortedPlayers = () => {
     let filtered = [...players];
@@ -334,11 +280,6 @@ export default function PlayersUnifiedPage() {
     }
 
     return <div className="flex flex-wrap gap-1">{badges}</div>;
-  };
-
-  const isPlayerBanned = (bans?: SteamBans | null) => {
-    if (!bans) return false;
-    return bans.VACBanned || bans.CommunityBanned || (bans.NumberOfGameBans ?? 0) > 0;
   };
 
   const sortedPlayers = getSortedPlayers();
@@ -499,9 +440,7 @@ export default function PlayersUnifiedPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {sortedPlayers.map((player) => {
-                      const isBanned = isPlayerBanned(player.steamBans);
-                      return (
+                    {sortedPlayers.map((player) => (
                       <tr key={player.$id} className="border-b border-slate-800 hover:bg-slate-800/50 transition-colors">
                         <td className="p-3">
                           {player.steamData?.avatar ? (
@@ -640,8 +579,7 @@ export default function PlayersUnifiedPage() {
                           </div>
                         </td>
                       </tr>
-                      );
-                    })}
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -650,9 +588,9 @@ export default function PlayersUnifiedPage() {
             <div className="flex items-center justify-between mt-4">
               <div className="text-slate-400 text-sm">Mostrando página {page} de {Math.max(1, Math.ceil(total / limit))} — {total} jogadores</div>
               <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" onClick={() => { const np = Math.max(1, page - 1); setPage(np); loadPlayers({ page: np }); }} disabled={page === 1} className="border-slate-600 text-slate-200 hover:bg-slate-800">Anterior</Button>
-                <Button size="sm" variant="outline" onClick={() => { const np = page + 1; setPage(np); loadPlayers({ page: np }); }} disabled={page >= Math.ceil(total / limit)} className="border-slate-600 text-slate-200 hover:bg-slate-800">Próxima</Button>
-                <Select value={String(limit)} onValueChange={(v) => { const nl = parseInt(v); setLimit(nl); setPage(1); loadPlayers({ page: 1, limit: nl }); }}>
+                <Button size="sm" variant="outline" onClick={() => { const np = Math.max(1, page - 1); setPage(np); }} disabled={page === 1} className="border-slate-600 text-slate-200 hover:bg-slate-800">Anterior</Button>
+                <Button size="sm" variant="outline" onClick={() => { const np = page + 1; setPage(np); }} disabled={page >= Math.ceil(total / limit)} className="border-slate-600 text-slate-200 hover:bg-slate-800">Próxima</Button>
+                <Select value={String(limit)} onValueChange={(v) => { const nl = parseInt(v); setLimit(nl); setPage(1); }}>
                   <SelectTrigger className="w-28 bg-slate-800 border border-slate-700 text-slate-100 rounded-md px-3 py-2 flex items-center justify-between gap-2 hover:bg-slate-800/90 focus:outline-none focus:ring-2 focus:ring-cyan-500">
                     <div className="truncate"><SelectValue /></div>
                     <svg className="w-4 h-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"/></svg>

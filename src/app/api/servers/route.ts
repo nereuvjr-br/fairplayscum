@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { Client, Databases, Query } from "node-appwrite";
+import "dotenv/config";
 
 const projectId = process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID!;
 const endpoint = process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT!;
