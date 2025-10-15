@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
-import { Client, Databases, Query, Models } from "node-appwrite";
+import { Client, Databases, Query } from "node-appwrite";
+import { EnrichedPlayer, ListPlayer, Player, PlayerVote, Server, SteamBans, SteamData } from "@/types";
+import "dotenv/config";
 
 const projectId = process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID!;
 const endpoint = process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT!;
@@ -8,10 +10,7 @@ const databaseId = "68ef2ed6000fa358405c";
 
 // Simple in-memory caches to reduce repeated Appwrite calls during dev / single-instance server
 const CACHE_TTL = 60 * 1000; // 60 seconds
-const serverCache = new Map<string, { expires: number; doc: any }>();
-const steamDataCache = new Map<string, { expires: number; doc: any }>();
-const steamBansCache = new Map<string, { expires: number; doc: any }>();
-const listPlayerCache = new Map<string, { expires: number; doc: any }>();
+const serverCache = new Map<string, { expires: number; doc: Server }>();
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -34,28 +33,28 @@ export async function GET(request: Request) {
     const COLLECTION_LIMIT = 5000; // adjust if you expect more documents
 
     // Fetch all players (snapshot)
-    const allPlayersRes = await databases.listDocuments(databaseId, "players", [Query.limit(COLLECTION_LIMIT)]);
-    const allPlayers = (allPlayersRes.documents || []) as any[];
+    const allPlayersRes = await databases.listDocuments<Player>(databaseId, "players", [Query.limit(COLLECTION_LIMIT)]);
+    const allPlayers = allPlayersRes.documents || [];
 
     // Fetch steamBans and steamData snapshots to compute ban score and allow searching by persona name
-    const allSteamBansRes = await databases.listDocuments(databaseId, "steamBans", [Query.limit(COLLECTION_LIMIT)]);
-    const allSteamBans = (allSteamBansRes.documents || []) as any[];
-    const steamBansMap: Record<string, any> = {};
+    const allSteamBansRes = await databases.listDocuments<SteamBans>(databaseId, "steamBans", [Query.limit(COLLECTION_LIMIT)]);
+    const allSteamBans = allSteamBansRes.documents || [];
+    const steamBansMap: Record<string, SteamBans> = {};
     for (const s of allSteamBans) {
       if (s.steamid) steamBansMap[s.steamid] = s;
     }
 
-    const allSteamDataRes = await databases.listDocuments(databaseId, "steamData", [Query.limit(COLLECTION_LIMIT)]);
-    const allSteamData = (allSteamDataRes.documents || []) as any[];
-    const steamDataMap: Record<string, any> = {};
+    const allSteamDataRes = await databases.listDocuments<SteamData>(databaseId, "steamData", [Query.limit(COLLECTION_LIMIT)]);
+    const allSteamData = allSteamDataRes.documents || [];
+    const steamDataMap: Record<string, SteamData> = {};
     for (const s of allSteamData) {
       if (s.steamid) steamDataMap[s.steamid] = s;
     }
 
     // Build a map of the latest listplayer entry per steamid (to get lastServer quickly)
-    const allListPlayerRes = await databases.listDocuments(databaseId, "listplayer", [Query.limit(COLLECTION_LIMIT), Query.orderDesc("$createdAt")]);
-    const allListPlayer = (allListPlayerRes.documents || []) as any[];
-    const lastListMap: Record<string, any> = {};
+    const allListPlayerRes = await databases.listDocuments<ListPlayer>(databaseId, "listplayer", [Query.limit(COLLECTION_LIMIT), Query.orderDesc("$createdAt")]);
+    const allListPlayer = allListPlayerRes.documents || [];
+    const lastListMap: Record<string, ListPlayer> = {};
     for (const lp of allListPlayer) {
       if (!lp.steamid) continue;
       if (!lastListMap[lp.steamid]) lastListMap[lp.steamid] = lp; // because ordered desc, first wins
@@ -63,7 +62,7 @@ export async function GET(request: Request) {
 
     // Helper to compute ban score for sorting
     const computeBanScore = (steamid: string) => {
-      const b = (steamBansMap[steamid] as any) || {};
+      const b = steamBansMap[steamid] || {};
       // handle different possible field namings in the steamBans documents
       const vacCount = Number(b.NumberOfVACBans ?? b.NumberOfVacBans ?? b.vacBans ?? 0);
       const gameCount = Number(b.NumberOfGameBans ?? b.NumberOfGameBans ?? b.NumberOfGameBans ?? b.gameBans ?? 0);
@@ -77,7 +76,7 @@ export async function GET(request: Request) {
     };
 
     // Combine players with their steamData and steamBans for sorting and optional search
-    const playersSnapshot = allPlayers.map((p: any) => ({
+    const playersSnapshot = allPlayers.map((p) => ({
       steamid: p.steamid,
       currentName: p.currentName,
       raw: p,
@@ -105,7 +104,7 @@ export async function GET(request: Request) {
     }
 
     // Global sort by ban score (desc)
-    snapshotFiltered.sort((a: any, b: any) => {
+    snapshotFiltered.sort((a, b) => {
       const aScore = computeBanScore(a.steamid || "");
       const bScore = computeBanScore(b.steamid || "");
       if (bScore !== aScore) return bScore - aScore;
@@ -119,7 +118,7 @@ export async function GET(request: Request) {
 
   // Build perPlayerResults for pagePlayers (use cached maps where possible)
   // Keep the original raw player doc so we can return fields like lastSeen/firstSeen
-  const playersPage = pagePlayers.map((p: any) => ({ steamid: p.steamid, currentName: p.currentName, raw: p.raw }));
+  const playersPage = pagePlayers.map((p) => ({ steamid: p.steamid, currentName: p.currentName, raw: p.raw }));
 
     const perPlayerResults = await Promise.all(
       playersPage.map(async (player) => {
@@ -144,26 +143,25 @@ export async function GET(request: Request) {
     );
 
     // Collect unique server IDs and fetch them once
-    const uniqueServerIds = Array.from(new Set(perPlayerResults.map(r => r.lastServerId).filter(Boolean)));
-    const serverMap: Record<string, any> = {};
+    const uniqueServerIds = Array.from(new Set(perPlayerResults.map(r => r.lastServerId).filter(Boolean) as string[]));
+    const serverMap: Record<string, Server> = {};
 
     if (uniqueServerIds.length > 0) {
       const serverFetchPromises = uniqueServerIds.map(async (sid) => {
         try {
           // Try cache first
-          const cached = serverCache.get(sid as string);
+          const cached = serverCache.get(sid);
           if (cached && cached.expires > Date.now()) {
-            serverMap[sid as string] = cached.doc;
+            serverMap[sid] = cached.doc;
             return;
           }
 
-          const serverDoc = await databases.getDocument(databaseId, "servers", sid as string);
-          serverMap[sid as string] = serverDoc;
-          serverCache.set(sid as string, { expires: Date.now() + CACHE_TTL, doc: serverDoc });
+          const serverDoc = await databases.getDocument<Server>(databaseId, "servers", sid);
+          serverMap[sid] = serverDoc;
+          serverCache.set(sid, { expires: Date.now() + CACHE_TTL, doc: serverDoc });
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           console.error(`Erro ao buscar servidor ${sid}:`, msg);
-          serverMap[sid as string] = null;
         }
       });
 
@@ -171,8 +169,8 @@ export async function GET(request: Request) {
     }
 
     // Assemble final enriched players array
-    const playersWithData = perPlayerResults.map((r) => {
-      const lastServerDoc = r.lastServerId ? serverMap[r.lastServerId as string] : null;
+    const playersWithData: EnrichedPlayer[] = perPlayerResults.map((r) => {
+      const lastServerDoc = r.lastServerId ? serverMap[r.lastServerId] : null;
       const lastServer = lastServerDoc
         ? {
             serverId: lastServerDoc.$id,
@@ -183,7 +181,21 @@ export async function GET(request: Request) {
         : null;
 
       // If we have the original raw player doc, spread it to keep fields like $id, firstSeen, lastSeen, nameHistory
-      const base = r.player?.raw ? { ...r.player.raw } : { steamid: r.player.steamid, currentName: r.player.currentName };
+      const base: Player = r.player?.raw ? { ...r.player.raw } : {
+        steamid: r.player.steamid,
+        currentName: r.player.currentName,
+        nameHistory: [],
+        firstSeen: new Date().toISOString(),
+        lastSeen: new Date().toISOString(),
+        $id: "",
+        $collectionId: "",
+        $databaseId: "",
+        $createdAt: new Date().toISOString(),
+        $updatedAt: new
+        Date().toISOString(),
+        $permissions: [],
+        $sequence: 0,
+      };
 
       return {
         ...base,
@@ -226,8 +238,8 @@ export async function GET(request: Request) {
     try {
       // Busca global limitada e filtra localmente para os steamids da página.
       // Ajuste Query.limit para um número adequado ao seu dataset.
-      const allVotes = await databases.listDocuments(databaseId, "playerVotes", [Query.limit(5000)]);
-      const votesDocs = allVotes.documents as unknown as any[];
+      const allVotes = await databases.listDocuments<PlayerVote>(databaseId, "playerVotes", [Query.limit(5000)]);
+      const votesDocs = allVotes.documents || [];
 
       for (const v of votesDocs) {
         const sid = v.steamid;
@@ -260,17 +272,34 @@ export async function GET(request: Request) {
     // Prioritize players with VAC/Game bans (place them first).
     // Compute a simple ban score: vacBans * 10 + gameBans * 5 + number of recorded ban flags
     playersWithVotes = playersWithVotes.sort((a, b) => {
-  const aBans = (a.steamBans as any) || {};
-  const bBans = (b.steamBans as any) || {};
+      const defaultBans: SteamBans = {
+        steamid: '',
+        VACBanned: false,
+        NumberOfVACBans: 0,
+        CommunityBanned: false,
+        NumberOfGameBans: 0,
+        DaysSinceLastBan: 0,
+        EconomyBan: 'none',
+        lastUpdated: '',
+        $id: '',
+        $collectionId: '',
+        $databaseId: '',
+        $createdAt: '',
+        $updatedAt: '',
+        $permissions: [],
+        $sequence: 0,
+      };
+      const aBans = a.steamBans || defaultBans;
+      const bBans = b.steamBans || defaultBans;
 
-  const aVac = Number(aBans.vacBans || 0);
-  const aGame = Number(aBans.gameBans || 0);
-  // count other ban indicators (e.g., communityBanned, economyBan) if present
-  const aFlags = [aBans.communityBanned, aBans.economyBan].filter(Boolean).length;
+      const aVac = Number(aBans.vacBans || aBans.NumberOfVACBans || 0);
+      const aGame = Number(aBans.gameBans || aBans.NumberOfGameBans || 0);
+      // count other ban indicators (e.g., communityBanned, economyBan) if present
+      const aFlags = [aBans.communityBanned, aBans.EconomyBan !== 'none'].filter(Boolean).length;
 
-  const bVac = Number(bBans.vacBans || 0);
-  const bGame = Number(bBans.gameBans || 0);
-  const bFlags = [bBans.communityBanned, bBans.economyBan].filter(Boolean).length;
+      const bVac = Number(bBans.vacBans || bBans.NumberOfVACBans || 0);
+      const bGame = Number(bBans.gameBans || bBans.NumberOfGameBans || 0);
+      const bFlags = [bBans.communityBanned, bBans.EconomyBan !== 'none'].filter(Boolean).length;
 
       const aScore = aVac * 10 + aGame * 5 + aFlags * 2;
       const bScore = bVac * 10 + bGame * 5 + bFlags * 2;
