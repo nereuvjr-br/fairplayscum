@@ -105,7 +105,7 @@ export default function PlayersUnifiedPage() {
   useEffect(() => {
     loadServers();
     loadPlayers();
-  }, []);
+  }, [loadPlayers]);
 
   const loadServers = async () => {
     try {
@@ -224,7 +224,7 @@ export default function PlayersUnifiedPage() {
       if (voterId) loadPlayers();
     }, 500);
     return () => clearTimeout(timer);
-  }, [search, selectedServer, voterId]);
+  }, [search, selectedServer, voterId, loadPlayers]);
 
   const getSortedPlayers = () => {
     let filtered = [...players];

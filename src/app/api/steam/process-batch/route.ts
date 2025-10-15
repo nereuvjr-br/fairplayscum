@@ -164,15 +164,16 @@ async function processSingleQuery() {
       steamid: query.steamid,
       queryType: query.queryType,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     // Marcar como erro
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
     await databases.updateDocument(
       databaseId,
       "steamQueue",
       query.$id,
       {
         status: "failed",
-        error: error.message,
+        error: errorMessage,
       }
     );
 
@@ -200,10 +201,11 @@ export async function GET(request: Request) {
         if (i < batch - 1) {
           await new Promise(resolve => setTimeout(resolve, 2000));
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
         results.push({
           processed: false,
-          error: error.message,
+          error: errorMessage,
         });
       }
     }
@@ -216,10 +218,11 @@ export async function GET(request: Request) {
       total: results.length,
       results,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error in batch processing:", error);
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }

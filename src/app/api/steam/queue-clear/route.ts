@@ -57,10 +57,11 @@ export async function POST(request: Request) {
       deleted,
       message: `${deleted} itens removidos da fila`,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error clearing queue:", error);
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }

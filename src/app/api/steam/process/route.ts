@@ -164,24 +164,26 @@ export async function GET() {
         success: true,
         message: `Consulta ${query.queryType} para ${query.steamid} concluída`,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Marcar como erro
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
       await databases.updateDocument(
         databaseId,
         "steamQueue",
         query.$id,
         {
           status: "error",
-          error: error.message,
+          error: errorMessage,
         }
       );
 
       throw error;
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error processing steam query:", error);
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }

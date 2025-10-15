@@ -32,7 +32,6 @@ export async function POST(request: Request) {
       // Jogador existe - atualizar
       const existingPlayer = existingPlayers.documents[0];
       const nameHistory = existingPlayer.nameHistory || [];
-      let alreadyExists = true;
       // Adicionar nome ao histórico se for diferente do atual
       if (player !== existingPlayer.currentName) {
         if (!nameHistory.includes(existingPlayer.currentName)) {
@@ -80,10 +79,11 @@ export async function POST(request: Request) {
     );
 
     return NextResponse.json({ success: true, isNew, doc });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Appwrite error:", error);
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
     return NextResponse.json(
-      { success: false, error: error.message || String(error) },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }

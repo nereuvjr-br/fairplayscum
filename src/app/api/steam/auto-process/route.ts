@@ -57,10 +57,11 @@ export async function POST(request: Request) {
       processed: data.processed || 0,
       results: data.results || [],
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error in auto-process:", error);
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }
@@ -69,7 +70,7 @@ export async function POST(request: Request) {
 /**
  * GET: Retorna status do processamento automático
  */
-export async function GET(request: Request) {
+export async function GET() {
   const client = new Client();
   client.setEndpoint(endpoint).setProject(projectId).setKey(apiKey);
   const databases = new Databases(client);
@@ -101,10 +102,11 @@ export async function GET(request: Request) {
       processing: processing.total,
       canProcess: pending.total > 0 && processing.total === 0,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error checking auto-process status:", error);
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }

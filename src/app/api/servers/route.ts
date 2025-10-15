@@ -23,10 +23,11 @@ export async function GET() {
     );
     
     return NextResponse.json({ success: true, servers: servers.documents });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Appwrite error:", error);
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
     return NextResponse.json(
-      { success: false, error: error.message || String(error) },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }

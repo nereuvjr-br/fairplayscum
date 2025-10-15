@@ -28,10 +28,11 @@ export async function DELETE(request: Request) {
       success: true,
       message: "Item removido da fila",
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error deleting queue item:", error);
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }
