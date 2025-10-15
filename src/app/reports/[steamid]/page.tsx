@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
+import Image from "next/image";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -60,9 +61,9 @@ export default function PlayerReportsPage() {
     if (steamid) {
       loadReports();
     }
-  }, [steamid]);
+  }, [steamid, loadReports]);
 
-  const loadReports = async () => {
+  const loadReports = useCallback(async () => {
     try {
       setLoading(true);
       const res = await fetch(`/api/reports/${steamid}`);
@@ -79,7 +80,7 @@ export default function PlayerReportsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [steamid]);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString("pt-BR");
@@ -150,9 +151,11 @@ export default function PlayerReportsPage() {
                   {/* Avatar */}
                   <div className="flex-shrink-0">
                     {steamData?.avatarfull ? (
-                      <img
+                      <Image
                         src={steamData.avatarfull}
                         alt={player?.currentName || "Player"}
+                        width={128}
+                        height={128}
                         className="w-32 h-32 rounded-lg border-2 border-slate-700"
                       />
                     ) : (

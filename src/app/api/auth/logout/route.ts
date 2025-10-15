@@ -12,7 +12,7 @@ export async function POST() {
     const account = new Account(client);
 
     // Tentar excluir sessões no Appwrite (se aplicável)
-    try { await account.deleteSessions(); } catch (error) { /* non-fatal */ }
+    try { await account.deleteSessions(); } catch { /* non-fatal */ }
 
     const res = NextResponse.json({ success: true });
     // limpar cookie

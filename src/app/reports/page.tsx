@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import Image from "next/image";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -60,16 +61,16 @@ export default function ReportsPage() {
 
   useEffect(() => {
     loadReports();
-  }, [filterType]);
+  }, [filterType, loadReports]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
       loadReports();
     }, 500);
     return () => clearTimeout(timer);
-  }, [search]);
+  }, [search, loadReports]);
 
-  const loadReports = async () => {
+  const loadReports = useCallback(async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
@@ -87,7 +88,7 @@ export default function ReportsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filterType, search]);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString("pt-BR");
@@ -287,9 +288,11 @@ export default function ReportsPage() {
                         {/* Avatar */}
                         <div className="w-16 h-16 rounded-lg bg-slate-700 flex-shrink-0">
                           {report.steamData?.avatar ? (
-                            <img
+                            <Image
                               src={report.steamData.avatar}
                               alt={report.player?.currentName || "Player"}
+                              width={64}
+                              height={64}
                               className="w-full h-full rounded-lg"
                             />
                           ) : (
@@ -342,9 +345,11 @@ export default function ReportsPage() {
           <DialogHeader>
             <DialogTitle className="text-slate-100 flex items-center gap-3">
               {selectedReport?.steamData?.avatar && (
-                <img
+                <Image
                   src={selectedReport.steamData.avatar}
                   alt="Avatar"
+                  width={48}
+                  height={48}
                   className="w-12 h-12 rounded"
                 />
               )}

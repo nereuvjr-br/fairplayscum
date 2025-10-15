@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import Image from "next/image";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -119,7 +120,7 @@ export default function PlayersUnifiedPage() {
     }
   };
 
-  const loadPlayers = async () => {
+  const loadPlayers = useCallback(async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
@@ -153,7 +154,7 @@ export default function PlayersUnifiedPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [search, selectedServer, voterId]);
 
   const handleVote = (steamid: string, name: string, voteType: 'like' | 'dislike' | 'neutral') => {
     setSelectedPlayerForVote({ steamid, name });
@@ -499,9 +500,11 @@ export default function PlayersUnifiedPage() {
                         <td className="p-3">
                           {isBanned ? (
                             player.steamData?.avatar ? (
-                              <img
+                              <Image
                                 src={player.steamData.avatar}
                                 alt={player.currentName}
+                                width={48}
+                                height={48}
                                 className="w-12 h-12 rounded"
                               />
                             ) : (

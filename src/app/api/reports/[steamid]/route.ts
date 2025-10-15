@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { Client, Databases, Query } from "node-appwrite";
 
 const projectId = process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID!;
@@ -7,7 +7,7 @@ const apiKey = process.env.APPWRITE_API_KEY!;
 const databaseId = "68ef2ed6000fa358405c";
 
 export async function GET(
-  request: Request,
+  request: NextRequest,
   { params }: { params: { steamid: string } }
 ) {
   const steamid = params.steamid;
