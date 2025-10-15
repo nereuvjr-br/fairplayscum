@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -36,23 +36,28 @@ const AdminSteamDataPage: React.FC = () => {
     }
   }, [user, authLoading, router]);
 
-  useEffect(() => {
-    if (user) {
-      loadPlayers();
+  const loadQueueStats = useCallback(async () => {
+    try {
+      const res = await fetch("/api/steam/stats");
+      const data = await res.json();
+      if (data.success) {
+        setQueueStats(data.stats);
+      }
+    } catch (error) {
+      console.error("Erro ao carregar estatísticas:", error);
+    }
+  }, []);
+
+  const processNext = useCallback(async () => {
+    try {
+      await fetch("/api/steam/process");
       loadQueueStats();
-      const interval = setInterval(loadQueueStats, 5000);
-      return () => clearInterval(interval);
+    } catch (error) {
+      console.error("Erro ao processar fila:", error);
     }
-  }, [showQueried, user, loadPlayers]);
+  }, [loadQueueStats]);
 
-  useEffect(() => {
-    if (autoProcess && user) {
-      const interval = setInterval(processNext, 30000 + Math.random() * 10000); // 30-40s
-      return () => clearInterval(interval);
-    }
-  }, [autoProcess, user, processNext]);
-
-  const loadPlayers = async () => {
+  const loadPlayers = useCallback(async () => {
     try {
       setLoading(true);
       const res = await fetch(`/api/players?limit=100&search=${search}&includeQueried=${showQueried}`);
@@ -65,19 +70,16 @@ const AdminSteamDataPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [search, showQueried]);
 
-  const loadQueueStats = async () => {
-    try {
-      const res = await fetch("/api/steam/stats");
-      const data = await res.json();
-      if (data.success) {
-        setQueueStats(data.stats);
-      }
-    } catch (error) {
-      console.error("Erro ao carregar estatísticas:", error);
+  useEffect(() => {
+    if (user) {
+      loadPlayers();
+      loadQueueStats();
+      const interval = setInterval(loadQueueStats, 5000);
+      return () => clearInterval(interval);
     }
-  };
+  }, [user, loadPlayers, loadQueueStats]);
 
   const togglePlayer = (steamid: string) => {
     const newSelected = new Set(selectedPlayers);
@@ -152,14 +154,7 @@ const AdminSteamDataPage: React.FC = () => {
     }
   };
 
-  const processNext = async () => {
-    try {
-      await fetch("/api/steam/process");
-      loadQueueStats();
-    } catch (error) {
-      console.error("Erro ao processar fila:", error);
-    }
-  };
+
 
   if (authLoading || !user) {
     return <p className="text-center p-8">Carregando...</p>;

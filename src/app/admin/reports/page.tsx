@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/lib/useAuth";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
@@ -27,20 +27,7 @@ export default function AdminReportsPage() {
   const { user, loading: authLoading, logout } = useAuth();
   const router = useRouter();
 
-  useEffect(() => {
-    console.log('[AdminReports] user:', user, 'authLoading:', authLoading);
-    // Redireciona para login só se authLoading for false e user for null
-    if (!authLoading && (!user || !user.$id)) {
-      router.replace('/admin/login');
-      return;
-    }
-    // Quando a auth estiver resolvida, buscar reports se estiver logado
-    if (!authLoading && user) {
-      fetchReports();
-    }
-  }, [filter, authLoading, user, fetchReports, router]);
-
-  const fetchReports = async () => {
+  const fetchReports = useCallback(async () => {
     setLoading(true);
     try {
       const response = await fetch(`/api/admin/reports?filter=${filter}`);
@@ -53,7 +40,20 @@ export default function AdminReportsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filter]);
+
+  useEffect(() => {
+    console.log('[AdminReports] user:', user, 'authLoading:', authLoading);
+    // Redireciona para login só se authLoading for false e user for null
+    if (!authLoading && (!user || !user.$id)) {
+      router.replace('/admin/login');
+      return;
+    }
+    // Quando a auth estiver resolvida, buscar reports se estiver logado
+    if (!authLoading && user) {
+      fetchReports();
+    }
+  }, [filter, authLoading, user, fetchReports, router]);
 
   const handleApprove = async (reportId: string) => {
     try {

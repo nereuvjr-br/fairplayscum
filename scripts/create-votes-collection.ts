@@ -1,4 +1,4 @@
-import { Client, Databases, Permission, Role } from "node-appwrite";
+import { Client, Databases, Permission, Role, IndexType } from "node-appwrite";
 import * as dotenv from "dotenv";
 
 dotenv.config();
@@ -30,8 +30,8 @@ async function createVotesCollection() {
         ]
       );
       console.log("✅ Coleção 'playerVotes' criada");
-    } catch (error: any) {
-      if (error.code === 409) console.log("✅ Coleção 'playerVotes' já existe");
+    } catch (error: unknown) {
+      if ((error as any).code === 409) console.log("✅ Coleção 'playerVotes' já existe");
       else throw error;
     }
 
@@ -63,8 +63,8 @@ async function createVotesCollection() {
           );
         }
         console.log(`  ✓ Atributo '${attr.name}' criado`);
-      } catch (error: any) {
-        if (error.code === 409) console.log(`  ℹ️  Atributo '${attr.name}' já existe`);
+      } catch (error: unknown) {
+        if ((error as any).code === 409) console.log(`  ℹ️  Atributo '${attr.name}' já existe`);
         else throw error;
       }
     }
@@ -77,14 +77,14 @@ async function createVotesCollection() {
         databaseId,
         "playerVotes",
         "idx_steamid",
-        "key",
+        IndexType.Key,
         ["steamid"],
         ["ASC"]
       );
       console.log("  ✓ Índice 'idx_steamid' criado");
-    } catch (error: any) {
-      if (error.code === 409) console.log("  ℹ️  Índice 'idx_steamid' já existe");
-      else console.log("  ⚠️  Erro ao criar índice idx_steamid:", error.message);
+    } catch (error: unknown) {
+      if ((error as any).code === 409) console.log("  ℹ️  Índice 'idx_steamid' já existe");
+      else console.log("  ⚠️  Erro ao criar índice idx_steamid:", (error as any).message);
     }
 
     try {
@@ -92,21 +92,21 @@ async function createVotesCollection() {
         databaseId,
         "playerVotes",
         "idx_voter",
-        "key",
+        IndexType.Key,
         ["voterId", "steamid"],
         ["ASC", "ASC"]
       );
       console.log("  ✓ Índice 'idx_voter' criado");
-    } catch (error: any) {
-      if (error.code === 409) console.log("  ℹ️  Índice 'idx_voter' já existe");
-      else console.log("  ⚠️  Erro ao criar índice idx_voter:", error.message);
+    } catch (error: unknown) {
+      if ((error as any).code === 409) console.log("  ℹ️  Índice 'idx_voter' já existe");
+      else console.log("  ⚠️  Erro ao criar índice idx_voter:", (error as any).message);
     }
 
     console.log("\n✅ Collection de votos criada com sucesso!");
     console.log("💡 Aguarde alguns segundos para os índices serem criados antes de usar");
 
-  } catch (error: any) {
-    console.error("❌ Erro:", error.message);
+  } catch (error: unknown) {
+    console.error("❌ Erro:", (error as any).message);
   }
 }
 

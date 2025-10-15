@@ -6,6 +6,7 @@ const endpoint = process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT!;
 const apiKey = process.env.APPWRITE_API_KEY!;
 const databaseId = "68ef2ed6000fa358405c";
 
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const filter = searchParams.get("filter") || "pending";
@@ -36,7 +37,7 @@ export async function GET(request: Request) {
 
     // Buscar informações dos jogadores
     const reportsWithPlayerData = await Promise.all(
-      reports.documents.map(async (report: { $id: string; steamid: string; reason: string; clips: string; createdAt: string; updatedAt: string; approved: boolean; approvedBy: string; approvedAt: string; }) => {
+      reports.documents.map(async (report) => {
         try {
           const playerDocs = await databases.listDocuments(
             databaseId,
@@ -58,7 +59,7 @@ export async function GET(request: Request) {
             approvedBy: report.approvedBy,
             approvedAt: report.approvedAt,
           };
-        } catch (e) {
+        } catch {
           return {
             $id: report.$id,
             steamid: report.steamid,

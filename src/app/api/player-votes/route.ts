@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
-import { Client, Databases, Query, ID } from "node-appwrite";
+import { Client, Databases, Query, ID, Models } from "node-appwrite";
 
 const projectId = process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID!;
 const endpoint = process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT!;
 const apiKey = process.env.APPWRITE_API_KEY!;
 const databaseId = "68ef2ed6000fa358405c";
+
+interface VoteDocument extends Models.Document {
+  voteType: string;
+}
 
 export async function POST(request: Request) {
   const { steamid, voteType, voterId, reason, clips } = await request.json();
@@ -96,7 +100,6 @@ export async function POST(request: Request) {
         }
       );
     }
-
     // Calcular estatísticas de votos
     const allVotes = await databases.listDocuments(
       databaseId,
@@ -111,7 +114,7 @@ export async function POST(request: Request) {
       total: allVotes.total,
     };
 
-    allVotes.documents.forEach((vote: { voteType: string; }) => {
+    allVotes.documents.forEach((vote: VoteDocument) => {
       if (vote.voteType === "like") stats.likes++;
       else if (vote.voteType === "dislike") stats.dislikes++;
       else if (vote.voteType === "neutral") stats.neutral++;
@@ -164,7 +167,7 @@ export async function GET(request: Request) {
       total: allVotes.total,
     };
 
-    allVotes.documents.forEach((vote: { voteType: string; }) => {
+    allVotes.documents.forEach((vote: VoteDocument) => {
       if (vote.voteType === "like") stats.likes++;
       else if (vote.voteType === "dislike") stats.dislikes++;
       else if (vote.voteType === "neutral") stats.neutral++;

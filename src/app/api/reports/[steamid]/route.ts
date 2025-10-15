@@ -8,9 +8,9 @@ const databaseId = "68ef2ed6000fa358405c";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { steamid: string } }
+  context: { params: Promise<{ steamid: string; }> }
 ) {
-  const steamid = params.steamid;
+  const steamid = context.params.steamid;
 
   if (!steamid) {
     return NextResponse.json(

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -52,7 +52,7 @@ export default function AdminQueueManagement() {
     }
   }, [user, authLoading, router]);
 
-  const loadQueue = async () => {
+  const loadQueue = useCallback(async () => {
     try {
       const res = await fetch(`/api/steam/queue-list?status=${filter}&limit=200`);
       const data = await res.json();
@@ -62,9 +62,9 @@ export default function AdminQueueManagement() {
     } catch (error) {
       console.error("Erro ao carregar fila:", error);
     }
-  };
+  }, [filter]);
 
-  const loadStats = async () => {
+  const loadStats = useCallback(async () => {
     try {
       const res = await fetch("/api/steam/stats");
       const data = await res.json();
@@ -74,7 +74,7 @@ export default function AdminQueueManagement() {
     } catch (error) {
       console.error("Erro ao carregar estatísticas:", error);
     }
-  };
+  }, []);
 
   const deleteItem = async (id: string) => {
     if (!confirm("Deseja realmente remover este item da fila?")) return;
@@ -158,7 +158,7 @@ export default function AdminQueueManagement() {
       loadQueue();
       loadStats();
     }
-  }, [filter, user, loadQueue]);
+  }, [filter, user, loadQueue, loadStats]);
 
   useEffect(() => {
     if (!autoRefresh || !user) return;
