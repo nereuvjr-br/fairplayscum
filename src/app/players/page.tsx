@@ -103,23 +103,6 @@ export default function PlayersUnifiedPage() {
     setVoterId(id);
   }, []);
 
-  useEffect(() => {
-    loadServers();
-    loadPlayers();
-  }, [loadPlayers]);
-
-  const loadServers = async () => {
-    try {
-      const res = await fetch("/api/servers");
-      const data = await res.json();
-      if (data.success) {
-        setServers(data.servers);
-      }
-    } catch (error) {
-      console.error("Erro ao carregar servidores:", error);
-    }
-  };
-
   const loadPlayers = useCallback(async () => {
     try {
       setLoading(true);
@@ -155,6 +138,23 @@ export default function PlayersUnifiedPage() {
       setLoading(false);
     }
   }, [search, selectedServer, voterId]);
+
+  useEffect(() => {
+    const loadServers = async () => {
+      try {
+        const res = await fetch("/api/servers");
+        const data = await res.json();
+        if (data.success) {
+          setServers(data.servers);
+        }
+      } catch (error) {
+        console.error("Erro ao carregar servidores:", error);
+      }
+    };
+
+    loadServers();
+    loadPlayers();
+  }, [loadPlayers]);
 
   const handleVote = (steamid: string, name: string, voteType: 'like' | 'dislike' | 'neutral') => {
     setSelectedPlayerForVote({ steamid, name });

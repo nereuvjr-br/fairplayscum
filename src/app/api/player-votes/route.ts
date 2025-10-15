@@ -114,7 +114,7 @@ export async function POST(request: Request) {
       total: allVotes.total,
     };
 
-    allVotes.documents.forEach((vote: VoteDocument) => {
+    (allVotes.documents as unknown as VoteDocument[]).forEach((vote) => {
       if (vote.voteType === "like") stats.likes++;
       else if (vote.voteType === "dislike") stats.dislikes++;
       else if (vote.voteType === "neutral") stats.neutral++;
@@ -167,7 +167,7 @@ export async function GET(request: Request) {
       total: allVotes.total,
     };
 
-    allVotes.documents.forEach((vote: VoteDocument) => {
+    (allVotes.documents as unknown as VoteDocument[]).forEach((vote) => {
       if (vote.voteType === "like") stats.likes++;
       else if (vote.voteType === "dislike") stats.dislikes++;
       else if (vote.voteType === "neutral") stats.neutral++;

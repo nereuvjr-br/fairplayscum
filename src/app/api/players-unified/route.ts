@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { Client, Databases, Query } from "node-appwrite";
+import { Client, Databases, Query, Models } from "node-appwrite";
 
 const projectId = process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID!;
 const endpoint = process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT!;
@@ -26,17 +26,29 @@ export async function GET(request: Request) {
     );
 
     // Buscar dados da Steam para cada player
+    // Definir interfaces para os documentos
+    interface Player {
+      steamid: string;
+      currentName?: string;
+    }
+
+    interface SteamData extends Models.Document {
+      personaname?: string;
+    }
+
     const playersWithData = await Promise.all(
-      playersResponse.documents.map(async (player: { steamid: string; }) => {
+      (playersResponse.documents as unknown as Player[]).map(async (player) => {
         // Buscar dados de perfil Steam
-        let steamData = null;
+        let steamData: SteamData | null = null;
         try {
           const steamDataResponse = await databases.listDocuments(
             databaseId,
             "steamData",
             [Query.equal("steamid", player.steamid), Query.limit(1)]
           );
-          steamData = steamDataResponse.documents[0] || null;
+          if (steamDataResponse.documents.length > 0) {
+            steamData = steamDataResponse.documents[0] as unknown as SteamData;
+          }
         } catch (error) {
           console.error(`Erro ao buscar steamData para ${player.steamid}:`, error);
         }
