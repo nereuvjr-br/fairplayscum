@@ -43,14 +43,14 @@ const AdminSteamDataPage: React.FC = () => {
       const interval = setInterval(loadQueueStats, 5000);
       return () => clearInterval(interval);
     }
-  }, [showQueried, user]);
+  }, [showQueried, user, loadPlayers]);
 
   useEffect(() => {
     if (autoProcess && user) {
       const interval = setInterval(processNext, 30000 + Math.random() * 10000); // 30-40s
       return () => clearInterval(interval);
     }
-  }, [autoProcess, user]);
+  }, [autoProcess, user, processNext]);
 
   const loadPlayers = async () => {
     try {
@@ -313,7 +313,7 @@ const AdminSteamDataPage: React.FC = () => {
                 <p className="mb-2">Nenhum jogador {!showQueried && "pendente"} encontrado.</p>
                 {!showQueried && (
                   <p className="text-sm text-slate-500">
-                    Ative "Mostrar já consultados" para ver todos os jogadores.
+                    Ative &quot;Mostrar já consultados&quot; para ver todos os jogadores.
                   </p>
                 )}
               </div>

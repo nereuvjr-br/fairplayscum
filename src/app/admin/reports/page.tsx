@@ -24,10 +24,8 @@ export default function AdminReportsPage() {
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"pending" | "approved" | "all">("pending");
-  const { user, loading: authLoading, login, logout, checkSession } = useAuth();
+  const { user, loading: authLoading, logout } = useAuth();
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
 
   useEffect(() => {
     console.log('[AdminReports] user:', user, 'authLoading:', authLoading);
@@ -40,7 +38,7 @@ export default function AdminReportsPage() {
     if (!authLoading && user) {
       fetchReports();
     }
-  }, [filter, authLoading, user]);
+  }, [filter, authLoading, user, fetchReports, router]);
 
   const fetchReports = async () => {
     setLoading(true);

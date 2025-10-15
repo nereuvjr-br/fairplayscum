@@ -15,7 +15,7 @@ export async function GET(request: Request) {
   const databases = new Databases(client);
 
   try {
-    let queries: string[] = [
+    const queries: string[] = [
       Query.equal("voteType", "dislike"),
       Query.orderDesc("createdAt"),
       Query.limit(1000)
@@ -36,7 +36,7 @@ export async function GET(request: Request) {
 
     // Buscar informações dos jogadores
     const reportsWithPlayerData = await Promise.all(
-      reports.documents.map(async (report: any) => {
+      reports.documents.map(async (report: { $id: string; steamid: string; reason: string; clips: string; createdAt: string; updatedAt: string; approved: boolean; approvedBy: string; approvedAt: string; }) => {
         try {
           const playerDocs = await databases.listDocuments(
             databaseId,
@@ -58,7 +58,7 @@ export async function GET(request: Request) {
             approvedBy: report.approvedBy,
             approvedAt: report.approvedAt,
           };
-        } catch (error) {
+        } catch (e) {
           return {
             $id: report.$id,
             steamid: report.steamid,
@@ -80,10 +80,11 @@ export async function GET(request: Request) {
       reports: reportsWithPlayerData,
       total: reports.total,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching reports:", error);
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }

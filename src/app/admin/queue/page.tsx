@@ -158,7 +158,7 @@ export default function AdminQueueManagement() {
       loadQueue();
       loadStats();
     }
-  }, [filter, user]);
+  }, [filter, user, loadQueue]);
 
   useEffect(() => {
     if (!autoRefresh || !user) return;
@@ -169,7 +169,7 @@ export default function AdminQueueManagement() {
     }, 5000); // Atualiza a cada 5 segundos
 
     return () => clearInterval(interval);
-  }, [autoRefresh, filter, user]);
+  }, [autoRefresh, filter, user, loadQueue, loadStats]);
 
   // Sistema de processamento automático
   useEffect(() => {
@@ -219,14 +219,14 @@ export default function AdminQueueManagement() {
       isRunning = false;
       setProcessing(false);
     };
-  }, [autoProcess, user]);
+  }, [autoProcess, user, loadQueue, loadStats]);
 
   const toggleAutoProcess = () => {
     setAutoProcess(!autoProcess);
   };
 
   const getStatusBadge = (status: string) => {
-    const variants: Record<string, { variant: any; label: string }> = {
+    const variants: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; label: string }> = {
       pending: { variant: "secondary", label: "Pendente" },
       processing: { variant: "default", label: "Processando" },
       completed: { variant: "default", label: "✓ Concluído" },
@@ -391,14 +391,14 @@ export default function AdminQueueManagement() {
                   </>
                 ) : (
                   <>
-                    <span className="text-yellow-400 font-semibold">⚠ Inativo:</span> Clique em "Iniciar Processamento" para processar automaticamente a fila.
+                    <span className="text-yellow-400 font-semibold">⚠ Inativo:</span> Clique em &quot;Iniciar Processamento&quot; para processar automaticamente a fila.
                   </>
                 )}
               </p>
               {autoProcess && (
                 <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
                   <p className="text-blue-200 text-xs">
-                    💡 <strong>Dica:</strong> Você pode minimizar esta página. O processamento continuará em background enquanto a aba estiver aberta.
+                    💡 <strong>&quot;Dica:&quot;</strong> Você pode minimizar esta página. O processamento continuará em background enquanto a aba estiver aberta.
                   </p>
                 </div>
               )}

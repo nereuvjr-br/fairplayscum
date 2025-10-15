@@ -26,11 +26,12 @@ export async function POST(request: Request) {
       { steamid, player, server }
     );
     return NextResponse.json({ success: true, doc });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Appwrite error:", error);
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
     return NextResponse.json({ 
       success: false, 
-      error: error.message || String(error) 
+      error: errorMessage
     }, { status: 500 });
   }
 }

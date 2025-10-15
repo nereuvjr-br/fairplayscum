@@ -37,10 +37,11 @@ export async function POST(request: Request) {
       success: true,
       message: "Denúncia aprovada com sucesso",
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error approving report:", error);
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }

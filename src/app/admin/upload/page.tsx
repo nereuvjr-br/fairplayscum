@@ -226,7 +226,7 @@ const AdminUploadPage: React.FC = () => {
 
       await Promise.all(filePromises);
 
-      setStats(prev => {
+      setStats(() => {
         const totalStats = initialStatuses.reduce((acc, status) => ({
           total: acc.total + status.stats.total,
           new: acc.new + status.stats.new,
