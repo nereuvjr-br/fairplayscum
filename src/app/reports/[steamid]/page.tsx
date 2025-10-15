@@ -57,12 +57,6 @@ export default function PlayerReportsPage() {
   const [stats, setStats] = useState<Stats>({ total: 0, totalApproved: 0, totalPending: 0, withClips: 0 });
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (steamid) {
-      loadReports();
-    }
-  }, [steamid, loadReports]);
-
   const loadReports = useCallback(async () => {
     try {
       setLoading(true);
@@ -81,6 +75,12 @@ export default function PlayerReportsPage() {
       setLoading(false);
     }
   }, [steamid]);
+
+  useEffect(() => {
+    if (steamid) {
+      loadReports();
+    }
+  }, [steamid, loadReports]);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString("pt-BR");

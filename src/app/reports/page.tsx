@@ -59,17 +59,6 @@ export default function ReportsPage() {
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
 
-  useEffect(() => {
-    loadReports();
-  }, [filterType, loadReports]);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      loadReports();
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [search, loadReports]);
-
   const loadReports = useCallback(async () => {
     try {
       setLoading(true);
@@ -89,6 +78,17 @@ export default function ReportsPage() {
       setLoading(false);
     }
   }, [filterType, search]);
+
+  useEffect(() => {
+    loadReports();
+  }, [filterType, loadReports]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      loadReports();
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [search, loadReports]);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString("pt-BR");

@@ -1,10 +1,42 @@
 import { NextResponse } from "next/server";
-import { Client, Databases, Query } from "node-appwrite";
+import { Client, Databases, Query, Models } from "node-appwrite";
 
 const projectId = process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID!;
 const endpoint = process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT!;
 const apiKey = process.env.APPWRITE_API_KEY!;
 const databaseId = "68ef2ed6000fa358405c";
+
+// Interfaces para os documentos
+interface VoteDocument extends Models.Document {
+  steamid: string;
+  voteType: string;
+  reason: string;
+  clips: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface PlayerDocument extends Models.Document {
+  currentName: string;
+  nameHistory: string[];
+  firstSeen: string;
+  lastSeen: string;
+}
+
+interface SteamDataDocument extends Models.Document {
+  personaname: string;
+  avatar: string;
+  profileurl: string;
+  communityvisibilitystate: number;
+}
+
+interface SteamBansDocument extends Models.Document {
+  VACBanned: boolean;
+  NumberOfVACBans: number;
+  CommunityBanned: boolean;
+  NumberOfGameBans: number;
+  DaysSinceLastBan: number;
+}
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -28,7 +60,7 @@ export async function GET(request: Request) {
     }
 
     // Buscar votos
-    const votes = await databases.listDocuments(
+    const votes = await databases.listDocuments<VoteDocument>(
       databaseId,
       "playerVotes",
       queries
@@ -36,10 +68,10 @@ export async function GET(request: Request) {
 
     // Buscar dados dos jogadores para cada voto
     const reportsWithPlayerData = await Promise.all(
-      votes.documents.map(async (vote: { $id: string; steamid: string; voteType: string; reason: string; clips: string; createdAt: string; updatedAt: string; }) => {
+      votes.documents.map(async (vote) => {
         try {
           // Buscar dados do player
-          const playerData = await databases.listDocuments(
+          const playerData = await databases.listDocuments<PlayerDocument>(
             databaseId,
             "players",
             [Query.equal("steamid", vote.steamid), Query.limit(1)]
@@ -48,18 +80,18 @@ export async function GET(request: Request) {
           const player = playerData.documents[0] || null;
 
           // Buscar dados Steam se disponível
-          let steamData = null;
-          let steamBans = null;
+          let steamData: SteamDataDocument | null = null;
+          let steamBans: SteamBansDocument | null = null;
 
           if (player) {
-            const steamDataRes = await databases.listDocuments(
+            const steamDataRes = await databases.listDocuments<SteamDataDocument>(
               databaseId,
               "steamData",
               [Query.equal("steamid", vote.steamid), Query.limit(1)]
             );
             steamData = steamDataRes.documents[0] || null;
 
-            const steamBansRes = await databases.listDocuments(
+            const steamBansRes = await databases.listDocuments<SteamBansDocument>(
               databaseId,
               "steamBans",
               [Query.equal("steamid", vote.steamid), Query.limit(1)]
@@ -86,23 +118,23 @@ export async function GET(request: Request) {
             createdAt: vote.createdAt,
             updatedAt: vote.updatedAt,
             player: player ? {
-              currentName: (player as { currentName: string; }).currentName,
-              nameHistory: (player as { nameHistory: string[]; }).nameHistory || [],
-              firstSeen: (player as { firstSeen: string; }).firstSeen,
-              lastSeen: (player as { lastSeen: string; }).lastSeen,
+              currentName: player.currentName,
+              nameHistory: player.nameHistory || [],
+              firstSeen: player.firstSeen,
+              lastSeen: player.lastSeen,
             } : null,
             steamData: steamData ? {
-              personaname: (steamData as { personaname: string; }).personaname,
-              avatar: (steamData as { avatar: string; }).avatar,
-              profileurl: (steamData as { profileurl: string; }).profileurl,
-              communityvisibilitystate: (steamData as { communityvisibilitystate: number; }).communityvisibilitystate,
+              personaname: steamData.personaname,
+              avatar: steamData.avatar,
+              profileurl: steamData.profileurl,
+              communityvisibilitystate: steamData.communityvisibilitystate,
             } : null,
             steamBans: steamBans ? {
-              VACBanned: (steamBans as { VACBanned: boolean; }).VACBanned,
-              NumberOfVACBans: (steamBans as { NumberOfVACBans: number; }).NumberOfVACBans,
-              CommunityBanned: (steamBans as { CommunityBanned: boolean; }).CommunityBanned,
-              NumberOfGameBans: (steamBans as { NumberOfGameBans: number; }).NumberOfGameBans,
-              DaysSinceLastBan: (steamBans as { DaysSinceLastBan: number; }).DaysSinceLastBan,
+              VACBanned: steamBans.VACBanned,
+              NumberOfVACBans: steamBans.NumberOfVACBans,
+              CommunityBanned: steamBans.CommunityBanned,
+              NumberOfGameBans: steamBans.NumberOfGameBans,
+              DaysSinceLastBan: steamBans.DaysSinceLastBan,
             } : null,
           };
         } catch (error) {
