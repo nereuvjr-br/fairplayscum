@@ -78,9 +78,13 @@ export default function PlayersUnifiedPage() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [servers, setServers] = useState<ServerOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState<number>(1);
+  const [limit, setLimit] = useState<number>(50);
+  const [total, setTotal] = useState<number>(0);
   const [search, setSearch] = useState("");
   const [selectedServer, setSelectedServer] = useState<string>("all");
-  const [sortBy, setSortBy] = useState<string>("name");
+  // default to 'backend' so we respect server-side ordering (ban priority)
+  const [sortBy, setSortBy] = useState<string>("backend");
   const [filterBanned, setFilterBanned] = useState<string>("all");
   const [voterId, setVoterId] = useState<string>("");
   
@@ -103,34 +107,28 @@ export default function PlayersUnifiedPage() {
     setVoterId(id);
   }, []);
 
-  const loadPlayers = useCallback(async () => {
+  const loadPlayers = useCallback(async (overrides?: { page?: number; limit?: number }) => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
       if (search) params.append("search", search);
       if (selectedServer !== "all") params.append("serverId", selectedServer);
+      const qPage = overrides?.page ?? page;
+      const qLimit = overrides?.limit ?? limit;
+      params.append("page", String(qPage));
+      params.append("limit", String(qLimit));
 
-      const res = await fetch(`/api/players-unified?${params}`);
+  const res = await fetch(`/api/players-unified?${params}`);
       const data = await res.json();
       if (data.success) {
-        // Carregar votos para cada jogador
-        const playersWithVotes = await Promise.all(
-          data.players.map(async (player: Player) => {
-            try {
-              const votesRes = await fetch(
-                `/api/player-votes?steamid=${player.steamid}&voterId=${voterId}`
-              );
-              const votesData = await votesRes.json();
-              if (votesData.success) {
-                return { ...player, votes: { ...votesData.stats, userVote: votesData.userVote } };
-              }
-            } catch (error) {
-              console.error(`Erro ao carregar votos para ${player.steamid}:`, error);
-            }
-            return player;
-          })
-        );
-        setPlayers(playersWithVotes);
+        setTotal(data.total ?? 0);
+        // Ensure page/limit reflect server response
+        if (data.page) setPage(data.page);
+        if (data.limit) setLimit(data.limit);
+
+        // The API returns fully enriched player objects (including lastSeen/firstSeen).
+        // Use them directly to avoid accidentally dropping fields.
+        setPlayers(data.players || []);
       }
     } catch (error) {
       console.error("Erro ao carregar jogadores:", error);
@@ -140,6 +138,8 @@ export default function PlayersUnifiedPage() {
   }, [search, selectedServer, voterId]);
 
   useEffect(() => {
+    // run once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     const loadServers = async () => {
       try {
         const res = await fetch("/api/servers");
@@ -153,8 +153,15 @@ export default function PlayersUnifiedPage() {
     };
 
     loadServers();
-    loadPlayers();
-  }, [loadPlayers]);
+    // initial load using current page/limit
+    loadPlayers({ page, limit });
+    // empty deps: only run once
+  }, []);
+
+  // Reset to first page when search or server changes
+  useEffect(() => {
+    setPage(1);
+  }, [search, selectedServer, filterBanned]);
 
   const handleVote = (steamid: string, name: string, voteType: 'like' | 'dislike' | 'neutral') => {
     setSelectedPlayerForVote({ steamid, name });
@@ -220,12 +227,21 @@ export default function PlayersUnifiedPage() {
     }
   };
 
+  // Debounce searches/filters (keep page reset to 1 in a separate effect)
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (voterId) loadPlayers();
+      if (voterId) {
+        // Reset to first page; page effect will trigger loadPlayers
+        setPage(1);
+      }
     }, 500);
     return () => clearTimeout(timer);
-  }, [search, selectedServer, voterId, loadPlayers]);
+  }, [search, selectedServer, voterId]);
+
+  // Load when page or limit change (immediate)
+  useEffect(() => {
+    loadPlayers({ page, limit });
+  }, [page, limit]);
 
   const getSortedPlayers = () => {
     let filtered = [...players];
@@ -246,21 +262,23 @@ export default function PlayersUnifiedPage() {
       filtered = filtered.filter(p => !p.steamBans?.VACBanned && !p.steamBans?.CommunityBanned && (p.steamBans?.NumberOfGameBans ?? 0) === 0);
     }
 
-    // Ordenar
-    filtered.sort((a, b) => {
-      switch (sortBy) {
-        case "name":
-          return (a.currentName || "").localeCompare(b.currentName || "");
-        case "steamid":
-          return (a.steamid || "").localeCompare(b.steamid || "");
-        case "server":
-          return (a.lastServer?.serverName || "").localeCompare(b.lastServer?.serverName || "");
-        case "lastSeen":
-          return new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime();
-        default:
-          return 0;
-      }
-    });
+    // Ordenar — se 'backend', respeitamos a ordem retornada pelo servidor (importante: banidos primeiro)
+    if (sortBy !== 'backend') {
+      filtered.sort((a, b) => {
+        switch (sortBy) {
+          case "name":
+            return (a.currentName || "").localeCompare(b.currentName || "");
+          case "steamid":
+            return (a.steamid || "").localeCompare(b.steamid || "");
+          case "server":
+            return (a.lastServer?.serverName || "").localeCompare(b.lastServer?.serverName || "");
+          case "lastSeen":
+            return new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime();
+          default:
+            return 0;
+        }
+      });
+    }
 
     return filtered;
   };
@@ -336,23 +354,7 @@ export default function PlayersUnifiedPage() {
             </h1>
             <p className="text-slate-400 mt-1">Jogadores vistos nos últimos 30 dias</p>
           </div>
-          <div className="flex gap-2">
-            <Button onClick={() => window.location.href = '/'} variant="outline" size="sm" className="border-slate-600 text-slate-200 hover:bg-slate-800">
-              🏠 Início
-            </Button>
-            <Button onClick={() => window.location.href = '/reports'} variant="outline" size="sm" className="border-slate-600 text-slate-200 hover:bg-slate-800">
-              📋 Denúncias
-            </Button>
-            <Button onClick={() => window.location.href = '/upload'} variant="outline" size="sm" className="border-slate-600 text-slate-200 hover:bg-slate-800">
-              📤 Upload
-            </Button>
-            <Button onClick={() => window.location.href = '/steam'} variant="outline" size="sm" className="border-slate-600 text-slate-200 hover:bg-slate-800">
-              🔍 Steam
-            </Button>
-            <Button onClick={() => window.location.href = '/queue'} variant="outline" size="sm" className="border-slate-600 text-slate-200 hover:bg-slate-800">
-              📋 Fila
-            </Button>
-          </div>
+          <div />
         </div>
 
         {/* Filters */}
@@ -372,10 +374,11 @@ export default function PlayersUnifiedPage() {
               <div>
                 <Label className="text-slate-300">Servidor</Label>
                 <Select value={selectedServer} onValueChange={setSelectedServer}>
-                  <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-100">
-                    <SelectValue />
+                  <SelectTrigger className="bg-slate-800 border border-slate-700 text-slate-100 rounded-md px-3 py-2 flex items-center justify-between gap-2 hover:bg-slate-800/90 focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                    <div className="truncate"><SelectValue /></div>
+                    <svg className="w-4 h-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"/></svg>
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-slate-900 border border-slate-700 rounded-md shadow-lg">
                     <SelectItem value="all">Todos os servidores</SelectItem>
                     {servers.map((server) => (
                       <SelectItem key={server.$id} value={server.$id}>
@@ -389,10 +392,12 @@ export default function PlayersUnifiedPage() {
               <div>
                 <Label className="text-slate-300">Ordenar por</Label>
                 <Select value={sortBy} onValueChange={setSortBy}>
-                  <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-100">
-                    <SelectValue />
+                  <SelectTrigger className="bg-slate-800 border border-slate-700 text-slate-100 rounded-md px-3 py-2 flex items-center justify-between gap-2 hover:bg-slate-800/90 focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                    <div className="truncate"><SelectValue /></div>
+                    <svg className="w-4 h-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"/></svg>
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-slate-900 border border-slate-700 rounded-md shadow-lg">
+                    <SelectItem value="backend">Relevância (banidos primeiro)</SelectItem>
                     <SelectItem value="name">Nome</SelectItem>
                     <SelectItem value="steamid">SteamID</SelectItem>
                     <SelectItem value="server">Servidor</SelectItem>
@@ -404,10 +409,11 @@ export default function PlayersUnifiedPage() {
               <div>
                 <Label className="text-slate-300">Banimentos</Label>
                 <Select value={filterBanned} onValueChange={setFilterBanned}>
-                  <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-100">
-                    <SelectValue />
+                  <SelectTrigger className="bg-slate-800 border border-slate-700 text-slate-100 rounded-md px-3 py-2 flex items-center justify-between gap-2 hover:bg-slate-800/90 focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                    <div className="truncate"><SelectValue /></div>
+                    <svg className="w-4 h-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"/></svg>
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-slate-900 border border-slate-700 rounded-md shadow-lg">
                     <SelectItem value="all">Todos</SelectItem>
                     <SelectItem value="banned">Apenas banidos</SelectItem>
                     <SelectItem value="clean">Apenas limpos</SelectItem>
@@ -463,7 +469,7 @@ export default function PlayersUnifiedPage() {
           </Card>
         </div>
 
-        {/* Players Table */}
+  {/* Players Table */}
         <Card className="border-slate-800 bg-slate-900/50 backdrop-blur">
           <CardHeader>
             <CardTitle className="text-slate-100">
@@ -484,7 +490,7 @@ export default function PlayersUnifiedPage() {
                     <tr className="border-b border-slate-700">
                       <th className="text-left p-3 text-slate-300 font-medium">Avatar</th>
                       <th className="text-left p-3 text-slate-300 font-medium">Nome</th>
-                      <th className="text-left p-3 text-slate-300 font-medium">SteamID</th>
+                      
                       <th className="text-left p-3 text-slate-300 font-medium">Perfil Steam</th>
                       <th className="text-left p-3 text-slate-300 font-medium">Banimentos</th>
                       <th className="text-left p-3 text-slate-300 font-medium">Último Visto</th>
@@ -498,23 +504,17 @@ export default function PlayersUnifiedPage() {
                       return (
                       <tr key={player.$id} className="border-b border-slate-800 hover:bg-slate-800/50 transition-colors">
                         <td className="p-3">
-                          {isBanned ? (
-                            player.steamData?.avatar ? (
-                              <Image
-                                src={player.steamData.avatar}
-                                alt={player.currentName}
-                                width={48}
-                                height={48}
-                                className="w-12 h-12 rounded"
-                              />
-                            ) : (
-                              <div className="w-12 h-12 rounded bg-slate-700 flex items-center justify-center text-slate-400 text-xs">
-                                N/A
-                              </div>
-                            )
+                          {player.steamData?.avatar ? (
+                            <Image
+                              src={player.steamData.avatar}
+                              alt={player.currentName}
+                              width={48}
+                              height={48}
+                              className="w-12 h-12 rounded"
+                            />
                           ) : (
-                            <div className="w-12 h-12 rounded bg-slate-700 flex items-center justify-center text-slate-500 text-xs">
-                              🔒
+                            <div className="w-12 h-12 rounded bg-slate-700 flex items-center justify-center text-slate-400 text-xs">
+                              N/A
                             </div>
                           )}
                         </td>
@@ -563,37 +563,27 @@ export default function PlayersUnifiedPage() {
                             </div>
                           </div>
                         </td>
+                        
                         <td className="p-3">
-                          {isBanned ? (
-                            <div className="font-mono text-sm text-slate-300">{player.steamid}</div>
-                          ) : (
-                            <div className="text-slate-500 text-sm">🔒 Oculto</div>
-                          )}
-                        </td>
-                        <td className="p-3">
-                          {isBanned ? (
-                            player.steamData ? (
-                              <div>
-                                <div className="text-slate-200">{player.steamData.personaname}</div>
-                                <div className="text-xs text-slate-400">
-                                  {getVisibilityLabel(player.steamData.communityvisibilitystate)}
-                                </div>
-                                {player.steamData.profileurl && (
-                                  <a
-                                    href={player.steamData.profileurl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-xs text-blue-400 hover:text-blue-300"
-                                  >
-                                    Ver perfil →
-                                  </a>
-                                )}
+                          {player.steamData ? (
+                            <div>
+                              <div className="text-slate-200">{player.steamData.personaname || player.currentName}</div>
+                              <div className="text-xs text-slate-400">
+                                {getVisibilityLabel(player.steamData.communityvisibilitystate)}
                               </div>
-                            ) : (
-                              <Badge variant="outline" className="text-slate-500">Não consultado</Badge>
-                            )
+                              {player.steamData.profileurl && (
+                                <a
+                                  href={player.steamData.profileurl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-blue-400 hover:text-blue-300"
+                                >
+                                  Ver perfil →
+                                </a>
+                              )}
+                            </div>
                           ) : (
-                            <div className="text-slate-500 text-sm">🔒 Oculto</div>
+                            <Badge variant="outline" className="text-slate-500">Sem dados</Badge>
                           )}
                         </td>
                         <td className="p-3">
@@ -656,6 +646,26 @@ export default function PlayersUnifiedPage() {
                 </table>
               </div>
             )}
+            {/* Pagination controls */}
+            <div className="flex items-center justify-between mt-4">
+              <div className="text-slate-400 text-sm">Mostrando página {page} de {Math.max(1, Math.ceil(total / limit))} — {total} jogadores</div>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => { const np = Math.max(1, page - 1); setPage(np); loadPlayers({ page: np }); }} disabled={page === 1} className="border-slate-600 text-slate-200 hover:bg-slate-800">Anterior</Button>
+                <Button size="sm" variant="outline" onClick={() => { const np = page + 1; setPage(np); loadPlayers({ page: np }); }} disabled={page >= Math.ceil(total / limit)} className="border-slate-600 text-slate-200 hover:bg-slate-800">Próxima</Button>
+                <Select value={String(limit)} onValueChange={(v) => { const nl = parseInt(v); setLimit(nl); setPage(1); loadPlayers({ page: 1, limit: nl }); }}>
+                  <SelectTrigger className="w-28 bg-slate-800 border border-slate-700 text-slate-100 rounded-md px-3 py-2 flex items-center justify-between gap-2 hover:bg-slate-800/90 focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                    <div className="truncate"><SelectValue /></div>
+                    <svg className="w-4 h-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"/></svg>
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-900 border border-slate-700 rounded-md shadow-lg">
+                    <SelectItem value="10">10 por página</SelectItem>
+                    <SelectItem value="25">25 por página</SelectItem>
+                    <SelectItem value="50">50 por página</SelectItem>
+                    <SelectItem value="100">100 por página</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>
