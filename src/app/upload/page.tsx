@@ -1,0 +1,458 @@
+"use client";
+import React, { useState, useEffect } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+
+interface LogData {
+  player: string;
+  steamid: string;
+}
+
+interface Server {
+  $id: string;
+  serverId: string;
+  name: string;
+  region: string;
+  flag: string;
+  active: boolean;
+}
+
+interface UploadStats {
+  total: number;
+  new: number;
+  updated: number;
+  errors: number;
+}
+
+function parseLog(content: string): LogData[] {
+  const regex = /LogSCUM: Message from user: ([^\(]+) \((\d+)\)/g;
+  const steamidMap = new Map<string, LogData>();
+  let match;
+  while ((match = regex.exec(content)) !== null) {
+    const player = match[1].trim();
+    const steamid = match[2];
+    if (!steamidMap.has(steamid)) {
+      steamidMap.set(steamid, { player, steamid });
+    }
+  }
+  return Array.from(steamidMap.values());
+}
+
+const UploadPage: React.FC = () => {
+  const [jsonResult, setJsonResult] = useState<LogData[] | null>(null);
+  const [selectedServer, setSelectedServer] = useState<string>("");
+  const [uploading, setUploading] = useState(false);
+  const [uploadSuccess, setUploadSuccess] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [fileName, setFileName] = useState<string>("");
+  const [servers, setServers] = useState<Server[]>([]);
+  const [loadingServers, setLoadingServers] = useState(true);
+  const [stats, setStats] = useState<UploadStats>({ total: 0, new: 0, updated: 0, errors: 0 });
+  const [currentProcessing, setCurrentProcessing] = useState<string>("");
+
+  // Carregar servidores ao montar o componente
+  useEffect(() => {
+    loadServers();
+  }, []);
+
+  const loadServers = async () => {
+    try {
+      setLoadingServers(true);
+      const res = await fetch("/api/servers");
+      const data = await res.json();
+      if (data.success) {
+        setServers(data.servers);
+      } else {
+        console.error("Erro ao carregar servidores:", data.error);
+      }
+    } catch (error) {
+      console.error("Erro ao carregar servidores:", error);
+    } finally {
+      setLoadingServers(false);
+    }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    if (!selectedServer) {
+      alert("Por favor, selecione um servidor antes de fazer upload.");
+      return;
+    }
+
+    setFileName(file.name);
+    setUploading(true);
+    setUploadSuccess(false);
+    setUploadProgress(5);
+    setStats({ total: 0, new: 0, updated: 0, errors: 0 });
+    setCurrentProcessing("Lendo arquivo...");
+
+    try {
+      const text = await file.text();
+      setUploadProgress(15);
+      setCurrentProcessing("Analisando log...");
+      
+      const data = parseLog(text);
+      setJsonResult(data);
+      setUploadProgress(25);
+      
+      if (data.length === 0) {
+        alert("Nenhum jogador encontrado no arquivo de log.");
+        setUploading(false);
+        return;
+      }
+
+      const selectedServerData = servers.find(s => s.serverId === selectedServer);
+      const total = data.length;
+      let newPlayers = 0;
+      let updatedPlayers = 0;
+      let errors = 0;
+
+      setCurrentProcessing(`Processando ${total} jogadores...`);
+
+      for (let i = 0; i < data.length; i++) {
+        try {
+          setCurrentProcessing(`Processando ${data[i].player} (${i + 1}/${total})`);
+          
+          const response = await fetch("/api/upload-players", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              steamid: data[i].steamid,
+              player: data[i].player,
+              server: selectedServerData?.name || selectedServer,
+              serverId: selectedServer,
+            }),
+          });
+
+          const result = await response.json();
+          if (result.success) {
+            if (result.isNew) {
+              newPlayers++;
+            } else {
+              updatedPlayers++;
+            }
+          } else {
+            errors++;
+          }
+
+          setStats({
+            total: i + 1,
+            new: newPlayers,
+            updated: updatedPlayers,
+            errors: errors,
+          });
+
+          setUploadProgress(25 + ((i + 1) / total) * 75);
+        } catch (error) {
+          console.error(`Erro ao processar ${data[i].player}:`, error);
+          errors++;
+        }
+      }
+
+      setCurrentProcessing("Upload concluído!");
+      setUploadSuccess(true);
+      setUploadProgress(100);
+    } catch (error) {
+      console.error("Erro ao processar arquivo:", error);
+      alert("Erro ao processar o arquivo de log.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const downloadJSON = () => {
+    if (!jsonResult) return;
+    const dataStr = JSON.stringify(jsonResult, null, 2);
+    const dataBlob = new Blob([dataStr], { type: "application/json" });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `scum-players-${selectedServer}-${new Date().toISOString().split('T')[0]}.json`;
+    link.click();
+  };
+
+  const reset = () => {
+    setJsonResult(null);
+    setUploadSuccess(false);
+    setUploadProgress(0);
+    setFileName("");
+    setStats({ total: 0, new: 0, updated: 0, errors: 0 });
+    setCurrentProcessing("");
+    // Reset file input
+    const fileInput = document.getElementById('file-upload') as HTMLInputElement;
+    if (fileInput) fileInput.value = '';
+  };
+
+  const getSelectedServerInfo = () => {
+    return servers.find(s => s.serverId === selectedServer);
+  };
+
+  return (
+    <main className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-4 md:p-8">
+      <div className="max-w-5xl mx-auto space-y-6">
+        {/* Header */}
+          <div className="text-center space-y-3 mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex gap-2">
+              <Button onClick={() => window.location.href = '/players'} variant="outline" size="sm" className="border-slate-600 text-slate-200 hover:bg-slate-800">
+                👥 Base de Jogadores
+              </Button>
+              <Button onClick={() => window.location.href = '/steam'} variant="outline" size="sm" className="border-slate-600 text-slate-200 hover:bg-slate-800">
+                🔍 Consultar Steam
+              </Button>
+              <Button onClick={() => window.location.href = '/queue'} variant="outline" size="sm" className="border-slate-600 text-slate-200 hover:bg-slate-800">
+                📋 Gerenciar Fila
+              </Button>
+            </div>
+            <div></div>
+          </div>
+          <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-400 via-cyan-400 to-teal-400 bg-clip-text text-transparent">
+            SCUM Log Analyzer
+          </h1>
+          <p className="text-slate-400 text-lg">
+            Sistema de gestão de jogadores e servidores
+          </p>
+        </div>
+
+        {/* Main Upload Card */}
+        <Card className="border-slate-800 bg-slate-900/50 backdrop-blur">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-2xl text-slate-100">Upload de Log</CardTitle>
+                <CardDescription className="text-slate-400">
+                  Extraia dados de jogadores e sincronize com o banco de dados
+                </CardDescription>
+              </div>
+              <Badge variant="outline" className="text-cyan-400 border-cyan-400">
+                v2.0
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid md:grid-cols-2 gap-6">
+              {/* Server Select */}
+              <div className="space-y-2">
+                <Label htmlFor="server-select" className="text-slate-200 text-base font-medium">
+                  Servidor
+                </Label>
+                <Select 
+                  value={selectedServer} 
+                  onValueChange={setSelectedServer} 
+                  disabled={uploading || loadingServers}
+                >
+                  <SelectTrigger id="server-select" className="bg-slate-800 border-slate-700 text-slate-100">
+                    <SelectValue placeholder={loadingServers ? "Carregando servidores..." : "Escolha um servidor"} />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-800 border-slate-700">
+                    {servers.map((server) => (
+                      <SelectItem key={server.$id} value={server.serverId}>
+                        <div className="flex items-center gap-2">
+                          <span>{server.flag}</span>
+                          <span>{server.name}</span>
+                          <Badge variant="outline" className="ml-2 text-xs text-slate-400 border-slate-600">
+                            {server.region}
+                          </Badge>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* File Upload */}
+              <div className="space-y-2">
+                <Label htmlFor="file-upload" className="text-slate-200 text-base font-medium">
+                  Arquivo de Log
+                </Label>
+                <div className="relative">
+                  <input
+                    id="file-upload"
+                    type="file"
+                    accept=".log,.txt"
+                    onChange={handleFileChange}
+                    disabled={!selectedServer || uploading}
+                    className="flex h-10 w-full rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-cyan-400 placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Processing Status */}
+            {uploading && (
+              <div className="space-y-3">
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-400">{currentProcessing}</span>
+                  <span className="text-cyan-400 font-medium">{Math.round(uploadProgress)}%</span>
+                </div>
+                <Progress value={uploadProgress} className="h-2" />
+                
+                {/* Stats Grid */}
+                {stats.total > 0 && (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2">
+                    <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700">
+                      <div className="text-xs text-slate-400 mb-1">Total</div>
+                      <div className="text-xl font-bold text-slate-100">{stats.total}</div>
+                    </div>
+                    <div className="bg-emerald-500/10 rounded-lg p-3 border border-emerald-500/20">
+                      <div className="text-xs text-emerald-400 mb-1">Novos</div>
+                      <div className="text-xl font-bold text-emerald-400">{stats.new}</div>
+                    </div>
+                    <div className="bg-blue-500/10 rounded-lg p-3 border border-blue-500/20">
+                      <div className="text-xs text-blue-400 mb-1">Atualizados</div>
+                      <div className="text-xl font-bold text-blue-400">{stats.updated}</div>
+                    </div>
+                    <div className="bg-red-500/10 rounded-lg p-3 border border-red-500/20">
+                      <div className="text-xs text-red-400 mb-1">Erros</div>
+                      <div className="text-xl font-bold text-red-400">{stats.errors}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Success Message */}
+            {uploadSuccess && (
+              <div className="flex items-center gap-3 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                  <svg className="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <p className="text-emerald-400 font-medium">Upload concluído com sucesso!</p>
+                  <p className="text-emerald-400/70 text-sm">
+                    {stats.new} novos jogadores, {stats.updated} atualizados
+                    {stats.errors > 0 && `, ${stats.errors} erros`}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* File Info */}
+            {fileName && (
+              <div className="flex items-center gap-2 p-3 bg-slate-800 rounded-lg border border-slate-700">
+                <svg className="w-5 h-5 text-cyan-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <div className="flex-1 min-w-0">
+                  <p className="text-slate-300 text-sm truncate">{fileName}</p>
+                  {selectedServer && (
+                    <p className="text-slate-500 text-xs">
+                      {getSelectedServerInfo()?.name}
+                    </p>
+                  )}
+                </div>
+                {selectedServer && (
+                  <Badge variant="secondary" className="bg-cyan-500/20 text-cyan-400 border-0 flex-shrink-0">
+                    {getSelectedServerInfo()?.flag} {selectedServer}
+                  </Badge>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Results Card */}
+        {jsonResult && jsonResult.length > 0 && (
+          <Card className="border-slate-800 bg-slate-900/50 backdrop-blur animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-2xl text-slate-100">Resultado da Extração</CardTitle>
+                  <CardDescription className="text-slate-400">
+                    Jogadores únicos identificados no log
+                  </CardDescription>
+                </div>
+                <Badge className="bg-cyan-500/20 text-cyan-400 border-cyan-400 text-lg px-4 py-1">
+                  {jsonResult.length} jogador{jsonResult.length !== 1 ? 'es' : ''}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Player Cards Grid */}
+              <div className="grid md:grid-cols-2 gap-3 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
+                {jsonResult.map((player, index) => (
+                  <div
+                    key={player.steamid}
+                    className="p-4 bg-slate-800/50 rounded-lg border border-slate-700 hover:border-cyan-500/50 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-slate-100 font-medium truncate">{player.player}</p>
+                        <p className="text-slate-400 text-sm font-mono">{player.steamid}</p>
+                      </div>
+                      <Badge variant="outline" className="flex-shrink-0 text-xs">
+                        #{index + 1}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* JSON Preview */}
+              <details className="group">
+                <summary className="cursor-pointer text-sm text-slate-400 hover:text-cyan-400 transition-colors list-none flex items-center gap-2">
+                  <svg className="w-4 h-4 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                  Ver JSON completo
+                </summary>
+                <pre className="mt-3 bg-slate-950 p-4 rounded-lg text-sm text-slate-300 overflow-x-auto border border-slate-800">
+                  {JSON.stringify(jsonResult, null, 2)}
+                </pre>
+              </details>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-2">
+                <Button onClick={downloadJSON} className="flex-1 bg-cyan-600 hover:bg-cyan-700 text-white">
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Baixar JSON
+                </Button>
+                <Button onClick={reset} variant="outline" className="border-slate-700 text-slate-300 hover:bg-slate-800">
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Novo Upload
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Info Footer */}
+        <div className="text-center text-slate-500 text-sm space-y-1">
+          <p>💡 Dica: Os logs são processados localmente e enviados diretamente para o banco de dados</p>
+          <p className="text-xs">Suporte para arquivos .log e .txt</p>
+        </div>
+      </div>
+
+      <style jsx>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: rgb(30 41 59);
+          border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: rgb(71 85 105);
+          border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: rgb(100 116 139);
+        }
+      `}</style>
+    </main>
+  );
+};
+
+export default UploadPage;
