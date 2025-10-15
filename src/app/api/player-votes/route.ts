@@ -16,9 +16,9 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!["like", "dislike", "neutral"].includes(voteType)) {
+  if (!["dislike"].includes(voteType)) {
     return NextResponse.json(
-      { success: false, error: "voteType deve ser like, dislike ou neutral" },
+      { success: false, error: "Apenas denúncias (dislike) são permitidas" },
       { status: 400 }
     );
   }
@@ -57,7 +57,7 @@ export async function POST(request: Request) {
     const existingVote = existingVoteByVoterId.documents[0] || existingVoteByIP.documents[0];
 
     if (existingVote) {
-      // Atualizar voto existente
+      // Atualizar denúncia existente
       await databases.updateDocument(
         databaseId,
         "playerVotes",
@@ -69,10 +69,14 @@ export async function POST(request: Request) {
           voterId, // Atualizar voterId caso tenha mudado
           voterIp: ip, // Atualizar IP
           updatedAt: new Date().toISOString(),
+          // Resetar aprovação ao atualizar denúncia
+          approved: false,
+          approvedBy: null,
+          approvedAt: null,
         }
       );
     } else {
-      // Criar novo voto
+      // Criar nova denúncia (não aprovada por padrão)
       await databases.createDocument(
         databaseId,
         "playerVotes",
@@ -86,6 +90,9 @@ export async function POST(request: Request) {
           clips: clips || null,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
+          approved: false,
+          approvedBy: null,
+          approvedAt: null,
         }
       );
     }

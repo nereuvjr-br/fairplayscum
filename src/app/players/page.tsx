@@ -229,6 +229,15 @@ export default function PlayersUnifiedPage() {
   const getSortedPlayers = () => {
     let filtered = [...players];
 
+    // Filtrar apenas jogadores vistos nos últimos 30 dias
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    filtered = filtered.filter(p => {
+      const lastSeenDate = new Date(p.lastSeen);
+      return lastSeenDate >= thirtyDaysAgo;
+    });
+
     // Filtrar por banimentos
     if (filterBanned === "banned") {
       filtered = filtered.filter(p => p.steamBans?.VACBanned || p.steamBans?.CommunityBanned || (p.steamBans?.NumberOfGameBans ?? 0) > 0);
@@ -324,7 +333,7 @@ export default function PlayersUnifiedPage() {
             <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-400 via-cyan-400 to-teal-400 bg-clip-text text-transparent">
               Base de Jogadores
             </h1>
-            <p className="text-slate-400 mt-1">Visão unificada de todos os dados</p>
+            <p className="text-slate-400 mt-1">Jogadores vistos nos últimos 30 dias</p>
           </div>
           <div className="flex gap-2">
             <Button onClick={() => window.location.href = '/'} variant="outline" size="sm" className="border-slate-600 text-slate-200 hover:bg-slate-800">
@@ -602,55 +611,25 @@ export default function PlayersUnifiedPage() {
                         </td>
                         <td className="p-3">
                           <div className="flex flex-col items-center gap-2">
-                            {/* Vote counts */}
-                            <div className="flex items-center gap-3 text-xs">
-                              <span className="text-green-400">
-                                👍 {player.votes?.likes || 0}
-                              </span>
-                              <span className="text-slate-400">
-                                ⚪ {player.votes?.neutral || 0}
-                              </span>
-                              <span className="text-red-400">
-                                👎 {player.votes?.dislikes || 0}
+                            {/* Denunciation count */}
+                            <div className="flex items-center gap-2 text-xs">
+                              <span className="text-red-400 font-medium">
+                                � {player.votes?.dislikes || 0} {player.votes?.dislikes === 1 ? 'denúncia' : 'denúncias'}
                               </span>
                             </div>
                             {/* Vote buttons */}
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center justify-center">
                               <Button
                                 size="sm"
-                                variant={player.votes?.userVote === 'like' ? 'default' : 'outline'}
-                                className={`h-7 px-2 text-xs ${
-                                  player.votes?.userVote === 'like'
-                                    ? 'bg-green-600 hover:bg-green-700 text-white'
-                                    : 'border-slate-700 text-slate-300 hover:bg-slate-800'
-                                }`}
-                                onClick={() => handleVote(player.steamid, player.currentName, 'like')}
-                              >
-                                👍
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant={player.votes?.userVote === 'neutral' ? 'default' : 'outline'}
-                                className={`h-7 px-2 text-xs ${
-                                  player.votes?.userVote === 'neutral'
-                                    ? 'bg-slate-600 hover:bg-slate-700 text-white'
-                                    : 'border-slate-700 text-slate-300 hover:bg-slate-800'
-                                }`}
-                                onClick={() => handleVote(player.steamid, player.currentName, 'neutral')}
-                              >
-                                ⚪
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant={player.votes?.userVote === 'dislike' ? 'default' : 'outline'}
-                                className={`h-7 px-2 text-xs ${
+                                variant={player.votes?.userVote === 'dislike' ? 'destructive' : 'outline'}
+                                className={`h-7 px-3 text-xs ${
                                   player.votes?.userVote === 'dislike'
                                     ? 'bg-red-600 hover:bg-red-700 text-white'
-                                    : 'border-slate-700 text-slate-300 hover:bg-slate-800'
+                                    : 'border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-red-400'
                                 }`}
                                 onClick={() => handleVote(player.steamid, player.currentName, 'dislike')}
                               >
-                                👎
+                                {player.votes?.userVote === 'dislike' ? '✓ Denunciado' : '🚨 Denunciar'}
                               </Button>
                             </div>
                           </div>

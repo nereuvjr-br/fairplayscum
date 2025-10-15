@@ -40,9 +40,8 @@ interface SteamBans {
 
 interface Stats {
   total: number;
-  likes: number;
-  dislikes: number;
-  neutral: number;
+  totalApproved: number;
+  totalPending: number;
   withClips: number;
 }
 
@@ -54,7 +53,7 @@ export default function PlayerReportsPage() {
   const [player, setPlayer] = useState<PlayerData | null>(null);
   const [steamData, setSteamData] = useState<SteamData | null>(null);
   const [steamBans, setSteamBans] = useState<SteamBans | null>(null);
-  const [stats, setStats] = useState<Stats>({ total: 0, likes: 0, dislikes: 0, neutral: 0, withClips: 0 });
+  const [stats, setStats] = useState<Stats>({ total: 0, totalApproved: 0, totalPending: 0, withClips: 0 });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -84,20 +83,6 @@ export default function PlayerReportsPage() {
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString("pt-BR");
-  };
-
-  const getVoteBadge = (voteType: string) => {
-    const configs: Record<string, { bg: string; text: string; label: string }> = {
-      like: { bg: "bg-green-600", text: "text-white", label: "👍 Positivo" },
-      neutral: { bg: "bg-slate-600", text: "text-white", label: "⚪ Neutro" },
-      dislike: { bg: "bg-red-600", text: "text-white", label: "👎 Negativo" },
-    };
-    const config = configs[voteType] || configs.neutral;
-    return (
-      <Badge className={`${config.bg} ${config.text}`}>
-        {config.label}
-      </Badge>
-    );
   };
 
   const getBanBadges = (bans: SteamBans | null) => {
@@ -221,40 +206,31 @@ export default function PlayerReportsPage() {
             </Card>
 
             {/* Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <Card className="border-slate-800 bg-slate-900/50 backdrop-blur">
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-slate-400">Total</CardTitle>
+                  <CardTitle className="text-sm font-medium text-slate-400">Total Denúncias</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-3xl font-bold text-cyan-400">{stats.total}</div>
+                  <div className="text-3xl font-bold text-red-400">{stats.total}</div>
                 </CardContent>
               </Card>
 
               <Card className="border-slate-800 bg-slate-900/50 backdrop-blur">
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-slate-400">Negativas</CardTitle>
+                  <CardTitle className="text-sm font-medium text-slate-400">Aprovadas</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-3xl font-bold text-red-400">{stats.dislikes}</div>
+                  <div className="text-3xl font-bold text-green-400">{stats.totalApproved}</div>
                 </CardContent>
               </Card>
 
               <Card className="border-slate-800 bg-slate-900/50 backdrop-blur">
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-slate-400">Neutras</CardTitle>
+                  <CardTitle className="text-sm font-medium text-slate-400">Pendentes</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-3xl font-bold text-slate-400">{stats.neutral}</div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-slate-800 bg-slate-900/50 backdrop-blur">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-slate-400">Positivas</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold text-green-400">{stats.likes}</div>
+                  <div className="text-3xl font-bold text-yellow-400">{stats.totalPending}</div>
                 </CardContent>
               </Card>
 
@@ -272,8 +248,11 @@ export default function PlayerReportsPage() {
             <Card className="border-slate-800 bg-slate-900/50 backdrop-blur">
               <CardHeader>
                 <CardTitle className="text-slate-100">
-                  Histórico de Avaliações ({reports.length})
+                  Denúncias Aprovadas ({reports.length})
                 </CardTitle>
+                <p className="text-sm text-slate-400 mt-2">
+                  Apenas denúncias aprovadas pela moderação são exibidas aqui.
+                </p>
               </CardHeader>
               <CardContent>
                 {reports.length === 0 ? (
@@ -290,7 +269,9 @@ export default function PlayerReportsPage() {
                         {/* Header */}
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center gap-3">
-                            {getVoteBadge(report.voteType)}
+                            <Badge className="bg-red-600 text-white">
+                              🚨 Denúncia Aprovada
+                            </Badge>
                             {report.clips && report.clips.length > 0 && (
                               <Badge variant="outline" className="border-purple-500 text-purple-400">
                                 🎥 {report.clips.length} clip(s)

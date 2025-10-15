@@ -28,6 +28,14 @@ interface UploadStats {
   errors: number;
 }
 
+interface FileUploadStatus {
+  fileName: string;
+  status: 'pending' | 'processing' | 'completed' | 'error';
+  progress: number;
+  stats: UploadStats;
+  error?: string;
+}
+
 function parseLog(content: string): LogData[] {
   const regex = /LogSCUM: Message from user: ([^\(]+) \((\d+)\)/g;
   const steamidMap = new Map<string, LogData>();
@@ -48,11 +56,11 @@ const UploadPage: React.FC = () => {
   const [uploading, setUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [fileName, setFileName] = useState<string>("");
   const [servers, setServers] = useState<Server[]>([]);
   const [loadingServers, setLoadingServers] = useState(true);
   const [stats, setStats] = useState<UploadStats>({ total: 0, new: 0, updated: 0, errors: 0 });
   const [currentProcessing, setCurrentProcessing] = useState<string>("");
+  const [fileStatuses, setFileStatuses] = useState<FileUploadStatus[]>([]);
 
   // Carregar servidores ao montar o componente
   useEffect(() => {
@@ -77,90 +85,151 @@ const UploadPage: React.FC = () => {
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
     
     if (!selectedServer) {
       alert("Por favor, selecione um servidor antes de fazer upload.");
       return;
     }
 
-    setFileName(file.name);
     setUploading(true);
     setUploadSuccess(false);
-    setUploadProgress(5);
+    setUploadProgress(0);
     setStats({ total: 0, new: 0, updated: 0, errors: 0 });
-    setCurrentProcessing("Lendo arquivo...");
+    setCurrentProcessing(`Processando ${files.length} arquivo(s)...`);
+
+    const selectedServerData = servers.find(s => s.serverId === selectedServer);
+
+    // Inicializar status de cada arquivo
+    const initialStatuses: FileUploadStatus[] = Array.from(files).map(file => ({
+      fileName: file.name,
+      status: 'pending',
+      progress: 0,
+      stats: { total: 0, new: 0, updated: 0, errors: 0 }
+    }));
+    setFileStatuses(initialStatuses);
 
     try {
-      const text = await file.text();
-      setUploadProgress(15);
-      setCurrentProcessing("Analisando log...");
-      
-      const data = parseLog(text);
-      setJsonResult(data);
-      setUploadProgress(25);
-      
-      if (data.length === 0) {
-        alert("Nenhum jogador encontrado no arquivo de log.");
-        setUploading(false);
-        return;
-      }
-
-      const selectedServerData = servers.find(s => s.serverId === selectedServer);
-      const total = data.length;
-      let newPlayers = 0;
-      let updatedPlayers = 0;
-      let errors = 0;
-
-      setCurrentProcessing(`Processando ${total} jogadores...`);
-
-      for (let i = 0; i < data.length; i++) {
+      // Processar todos os arquivos simultaneamente
+      const filePromises = Array.from(files).map(async (file, fileIndex) => {
         try {
-          setCurrentProcessing(`Processando ${data[i].player} (${i + 1}/${total})`);
-          
-          const response = await fetch("/api/upload-players", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              steamid: data[i].steamid,
-              player: data[i].player,
-              server: selectedServerData?.name || selectedServer,
-              serverId: selectedServer,
-            }),
+          // Atualizar status para processing
+          setFileStatuses(prev => {
+            const updated = [...prev];
+            updated[fileIndex].status = 'processing';
+            return updated;
           });
 
-          const result = await response.json();
-          if (result.success) {
-            if (result.isNew) {
-              newPlayers++;
-            } else {
-              updatedPlayers++;
-            }
-          } else {
-            errors++;
+          const text = await file.text();
+          const data = parseLog(text);
+          
+          if (data.length === 0) {
+            setFileStatuses(prev => {
+              const updated = [...prev];
+              updated[fileIndex].status = 'error';
+              updated[fileIndex].error = 'Nenhum jogador encontrado';
+              return updated;
+            });
+            return;
           }
 
-          setStats({
-            total: i + 1,
-            new: newPlayers,
-            updated: updatedPlayers,
-            errors: errors,
+          const total = data.length;
+          let newPlayers = 0;
+          let updatedPlayers = 0;
+          let errors = 0;
+
+          // Processar jogadores em lotes de 5 simultaneamente
+          const batchSize = 5;
+          for (let i = 0; i < data.length; i += batchSize) {
+            const batch = data.slice(i, Math.min(i + batchSize, data.length));
+            
+            await Promise.all(
+              batch.map(async (player) => {
+                try {
+                  const response = await fetch("/api/upload-players", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      steamid: player.steamid,
+                      player: player.player,
+                      server: selectedServerData?.name || selectedServer,
+                      serverId: selectedServer,
+                    }),
+                  });
+
+                  const result = await response.json();
+                  if (result.success) {
+                    if (result.isNew) {
+                      newPlayers++;
+                    } else {
+                      updatedPlayers++;
+                    }
+                  } else {
+                    errors++;
+                  }
+                } catch (error) {
+                  console.error(`Erro ao processar jogador:`, error);
+                  errors++;
+                }
+              })
+            );
+
+            // Atualizar progresso do arquivo
+            const processed = Math.min(i + batchSize, data.length);
+            const fileProgress = (processed / total) * 100;
+            
+            setFileStatuses(prev => {
+              const updated = [...prev];
+              updated[fileIndex].progress = fileProgress;
+              updated[fileIndex].stats = {
+                total: processed,
+                new: newPlayers,
+                updated: updatedPlayers,
+                errors: errors
+              };
+              return updated;
+            });
+          }
+
+          // Marcar arquivo como concluído
+          setFileStatuses(prev => {
+            const updated = [...prev];
+            updated[fileIndex].status = 'completed';
+            updated[fileIndex].progress = 100;
+            return updated;
           });
 
-          setUploadProgress(25 + ((i + 1) / total) * 75);
         } catch (error) {
-          console.error(`Erro ao processar ${data[i].player}:`, error);
-          errors++;
+          console.error(`Erro ao processar arquivo ${file.name}:`, error);
+          setFileStatuses(prev => {
+            const updated = [...prev];
+            updated[fileIndex].status = 'error';
+            updated[fileIndex].error = 'Erro ao processar arquivo';
+            return updated;
+          });
         }
-      }
+      });
+
+      await Promise.all(filePromises);
+
+      // Calcular estatísticas totais
+      setStats(prev => {
+        const totalStats = initialStatuses.reduce((acc, status) => ({
+          total: acc.total + status.stats.total,
+          new: acc.new + status.stats.new,
+          updated: acc.updated + status.stats.updated,
+          errors: acc.errors + status.stats.errors
+        }), { total: 0, new: 0, updated: 0, errors: 0 });
+        return totalStats;
+      });
 
       setCurrentProcessing("Upload concluído!");
       setUploadSuccess(true);
       setUploadProgress(100);
     } catch (error) {
-      console.error("Erro ao processar arquivo:", error);
-      alert("Erro ao processar o arquivo de log.");
+      console.error("Erro ao processar arquivos:", error);
+      alert("Erro ao processar os arquivos de log.");
     } finally {
       setUploading(false);
     }
@@ -181,7 +250,7 @@ const UploadPage: React.FC = () => {
     setJsonResult(null);
     setUploadSuccess(false);
     setUploadProgress(0);
-    setFileName("");
+    setFileStatuses([]);
     setStats({ total: 0, new: 0, updated: 0, errors: 0 });
     setCurrentProcessing("");
     // Reset file input
@@ -269,18 +338,20 @@ const UploadPage: React.FC = () => {
               {/* File Upload */}
               <div className="space-y-2">
                 <Label htmlFor="file-upload" className="text-slate-200 text-base font-medium">
-                  Arquivo de Log
+                  Arquivos de Log
                 </Label>
                 <div className="relative">
                   <input
                     id="file-upload"
                     type="file"
                     accept=".log,.txt"
+                    multiple
                     onChange={handleFileChange}
                     disabled={!selectedServer || uploading}
                     className="flex h-10 w-full rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-cyan-400 placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   />
                 </div>
+                <p className="text-xs text-slate-500">Você pode selecionar múltiplos arquivos</p>
               </div>
             </div>
 

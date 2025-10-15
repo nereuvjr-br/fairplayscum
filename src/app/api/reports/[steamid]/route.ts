@@ -24,14 +24,28 @@ export async function GET(
   const databases = new Databases(client);
 
   try {
-    // Buscar todos os votos deste jogador
-    const votes = await databases.listDocuments(
+    // Buscar TODAS as denúncias (apenas dislikes) para estatísticas
+    const allDenunciations = await databases.listDocuments(
       databaseId,
       "playerVotes",
       [
         Query.equal("steamid", steamid),
+        Query.equal("voteType", "dislike"),
         Query.orderDesc("$createdAt"),
-        Query.limit(100)
+        Query.limit(1000)
+      ]
+    );
+
+    // Buscar apenas denúncias APROVADAS para mostrar detalhes
+    const approvedDenunciations = await databases.listDocuments(
+      databaseId,
+      "playerVotes",
+      [
+        Query.equal("steamid", steamid),
+        Query.equal("voteType", "dislike"),
+        Query.equal("approved", true),
+        Query.orderDesc("$createdAt"),
+        Query.limit(1000)
       ]
     );
 
@@ -64,8 +78,8 @@ export async function GET(
       steamBans = steamBansRes.documents[0] || null;
     }
 
-    // Processar votos
-    const reports = votes.documents.map((vote: any) => {
+    // Processar apenas denúncias aprovadas para exibição
+    const reports = approvedDenunciations.documents.map((vote: any) => {
       let clips = [];
       if (vote.clips) {
         try {
@@ -83,16 +97,25 @@ export async function GET(
         clips,
         createdAt: vote.createdAt,
         updatedAt: vote.updatedAt,
+        approved: vote.approved,
+        approvedBy: vote.approvedBy,
+        approvedAt: vote.approvedAt,
       };
     });
 
-    // Calcular estatísticas
+    // Calcular estatísticas (todas as denúncias)
     const stats = {
-      total: reports.length,
-      likes: reports.filter(r => r.voteType === "like").length,
-      dislikes: reports.filter(r => r.voteType === "dislike").length,
-      neutral: reports.filter(r => r.voteType === "neutral").length,
-      withClips: reports.filter(r => r.clips && r.clips.length > 0).length,
+      total: allDenunciations.total,
+      totalApproved: approvedDenunciations.total,
+      totalPending: allDenunciations.total - approvedDenunciations.total,
+      withClips: allDenunciations.documents.filter((d: any) => {
+        try {
+          const clips = d.clips ? JSON.parse(d.clips) : [];
+          return clips && (clips.youtube?.length > 0 || clips.medal?.length > 0);
+        } catch {
+          return false;
+        }
+      }).length,
     };
 
     return NextResponse.json({
