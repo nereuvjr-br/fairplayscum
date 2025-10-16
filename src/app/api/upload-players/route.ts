@@ -70,9 +70,9 @@ export async function POST(request: Request) {
       isNew = true;
 
       // Adicionar à fila de verificação da Steam
-      const now = new Date();
-      const summaryScheduledTime = new Date(now.getTime() + 10000); // 10s de delay
-      const bansScheduledTime = new Date(now.getTime() + 40000); // 40s de delay (summary + 30s)
+      const scheduleTimeBase = new Date();
+      const summaryScheduledTime = new Date(scheduleTimeBase.getTime() + 10000); // 10s de delay
+      const bansScheduledTime = new Date(scheduleTimeBase.getTime() + 40000); // 40s de delay (summary + 30s)
 
       await databases.createDocument(
         databaseId,
