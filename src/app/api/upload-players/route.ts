@@ -68,6 +68,39 @@ export async function POST(request: Request) {
         }
       );
       isNew = true;
+
+      // Adicionar à fila de verificação da Steam
+      const now = new Date();
+      const summaryScheduledTime = new Date(now.getTime() + 10000); // 10s de delay
+      const bansScheduledTime = new Date(now.getTime() + 40000); // 40s de delay (summary + 30s)
+
+      await databases.createDocument(
+        databaseId,
+        "steamQueue",
+        ID.unique(),
+        {
+          steamid,
+          queryType: "summary",
+          status: "pending",
+          priority: 2, // Prioridade menor que a manual
+          scheduledFor: summaryScheduledTime.toISOString(),
+          attempts: 0,
+        }
+      );
+
+      await databases.createDocument(
+        databaseId,
+        "steamQueue",
+        ID.unique(),
+        {
+          steamid,
+          queryType: "bans",
+          status: "pending",
+          priority: 2,
+          scheduledFor: bansScheduledTime.toISOString(),
+          attempts: 0,
+        }
+      );
     }
 
     // Registrar na collection listplayer
