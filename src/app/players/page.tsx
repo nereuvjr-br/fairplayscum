@@ -57,37 +57,40 @@ export default function PlayersUnifiedPage() {
     setVoterId(id);
   }, []);
 
-  const loadPlayers = useCallback(async (overrides?: { page?: number; limit?: number }) => {
+  const loadPlayers = useCallback(async () => {
+    if (!voterId) return; // Don't load until we have a voter ID
+    setLoading(true);
     try {
-      setLoading(true);
-      const params = new URLSearchParams();
+      const params = new URLSearchParams({
+        page: String(page),
+        limit: String(limit),
+        sortBy,
+        filterBanned,
+        voterId,
+      });
+
       if (search) params.append("search", search);
       if (selectedServer !== "all") params.append("serverId", selectedServer);
-      const qPage = overrides?.page ?? page;
-      const qLimit = overrides?.limit ?? limit;
-      params.append("page", String(qPage));
-      params.append("limit", String(qLimit));
-      if (voterId) params.append("voterId", voterId);
 
-  const res = await fetch(`/api/players-unified?${params}`);
+      const res = await fetch(`/api/players-unified?${params.toString()}`);
       const data = await res.json();
-      if (data.success) {
-        setTotal(data.total ?? 0);
-        // Ensure page/limit reflect server response
-        if (data.page) setPage(data.page);
-        if (data.limit) setLimit(data.limit);
 
-        // The API returns fully enriched player objects (including lastSeen/firstSeen).
-        // Use them directly to avoid accidentally dropping fields.
+      if (data.success) {
         setPlayers(data.players || []);
+        setTotal(data.total ?? 0);
+      } else {
+        console.error("Failed to load players:", data.error);
+        setPlayers([]);
+        setTotal(0);
       }
     } catch (error) {
       console.error("Erro ao carregar jogadores:", error);
     } finally {
       setLoading(false);
     }
-  }, [page, limit, search, selectedServer, voterId]);
+  }, [page, limit, search, selectedServer, sortBy, filterBanned, voterId]);
 
+  // Effect for initial server list load
   useEffect(() => {
     const loadServers = async () => {
       try {
@@ -100,30 +103,26 @@ export default function PlayersUnifiedPage() {
         console.error("Erro ao carregar servidores:", error);
       }
     };
-
     loadServers();
   }, []);
 
-  // Reset to first page when search or server changes
+  // Centralized effect to handle data loading and debouncing
+  useEffect(() => {
+    // Debounce the call to loadPlayers
+    const handler = setTimeout(() => {
+      loadPlayers();
+    }, 500); // 500ms delay
+
+    // Cleanup function to cancel the timeout if dependencies change
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [loadPlayers]);
+
+  // Effect to reset page to 1 when filters change
   useEffect(() => {
     setPage(1);
-  }, [search, selectedServer, filterBanned]);
-
-
-  // Debounce searches/filters (keep page reset to 1 in a separate effect)
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (voterId) {
-        loadPlayers({ page: 1, limit });
-      }
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [search, selectedServer, voterId, limit, loadPlayers]);
-
-  // Load when page or limit change (immediate)
-  useEffect(() => {
-    loadPlayers({ page, limit });
-  }, [page, limit, loadPlayers]);
+  }, [search, selectedServer, sortBy, filterBanned, limit]);
 
   const handleVote = (steamid: string, name: string, voteType: 'like' | 'dislike' | 'neutral') => {
     setSelectedPlayerForVote({ steamid, name });
@@ -189,46 +188,6 @@ export default function PlayersUnifiedPage() {
     }
   };
 
-  const getSortedPlayers = () => {
-    let filtered = [...players];
-
-    // Filtrar apenas jogadores vistos nos últimos 30 dias
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    
-    filtered = filtered.filter(p => {
-      const lastSeenDate = new Date(p.lastSeen);
-      return lastSeenDate >= thirtyDaysAgo;
-    });
-
-    // Filtrar por banimentos
-    if (filterBanned === "banned") {
-      filtered = filtered.filter(p => p.steamBans?.VACBanned || p.steamBans?.CommunityBanned || (p.steamBans?.NumberOfGameBans ?? 0) > 0);
-    } else if (filterBanned === "clean") {
-      filtered = filtered.filter(p => !p.steamBans?.VACBanned && !p.steamBans?.CommunityBanned && (p.steamBans?.NumberOfGameBans ?? 0) === 0);
-    }
-
-    // Ordenar — se 'backend', respeitamos a ordem retornada pelo servidor (importante: banidos primeiro)
-    if (sortBy !== 'backend') {
-      filtered.sort((a, b) => {
-        switch (sortBy) {
-          case "name":
-            return (a.currentName || "").localeCompare(b.currentName || "");
-          case "steamid":
-            return (a.steamid || "").localeCompare(b.steamid || "");
-          case "server":
-            return (a.lastServer?.serverName || "").localeCompare(b.lastServer?.serverName || "");
-          case "lastSeen":
-            return new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime();
-          default:
-            return 0;
-        }
-      });
-    }
-
-    return filtered;
-  };
-
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString("pt-BR");
   };
@@ -281,8 +240,6 @@ export default function PlayersUnifiedPage() {
 
     return <div className="flex flex-wrap gap-1">{badges}</div>;
   };
-
-  const sortedPlayers = getSortedPlayers();
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-4 md:p-8">
@@ -372,7 +329,7 @@ export default function PlayersUnifiedPage() {
               <CardTitle className="text-sm font-medium text-slate-400">Total de Jogadores</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-slate-100">{sortedPlayers.length}</div>
+              <div className="text-3xl font-bold text-slate-100">{total}</div>
             </CardContent>
           </Card>
 
@@ -382,7 +339,7 @@ export default function PlayersUnifiedPage() {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-cyan-400">
-                {sortedPlayers.filter(p => p.steamData).length}
+                {players.filter(p => p.steamData).length}
               </div>
             </CardContent>
           </Card>
@@ -393,7 +350,7 @@ export default function PlayersUnifiedPage() {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-red-400">
-                {sortedPlayers.filter(p => p.steamBans?.VACBanned || p.steamBans?.CommunityBanned || (p.steamBans?.NumberOfGameBans ?? 0) > 0).length}
+                {players.filter(p => p.steamBans?.VACBanned || p.steamBans?.CommunityBanned || (p.steamBans?.NumberOfGameBans ?? 0) > 0).length}
               </div>
             </CardContent>
           </Card>
@@ -404,7 +361,7 @@ export default function PlayersUnifiedPage() {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-green-400">
-                {sortedPlayers.filter(p => p.steamBans && !p.steamBans.VACBanned && !p.steamBans.CommunityBanned && p.steamBans.NumberOfGameBans === 0).length}
+                {players.filter(p => p.steamBans && !p.steamBans.VACBanned && !p.steamBans.CommunityBanned && p.steamBans.NumberOfGameBans === 0).length}
               </div>
             </CardContent>
           </Card>
@@ -414,13 +371,13 @@ export default function PlayersUnifiedPage() {
         <Card className="border-slate-800 bg-slate-900/50 backdrop-blur">
           <CardHeader>
             <CardTitle className="text-slate-100">
-              Jogadores ({sortedPlayers.length})
+              Jogadores ({total})
             </CardTitle>
           </CardHeader>
           <CardContent>
             {loading ? (
               <div className="text-center py-12 text-slate-400">Carregando...</div>
-            ) : sortedPlayers.length === 0 ? (
+            ) : players.length === 0 ? (
               <div className="text-center py-12 text-slate-400">
                 Nenhum jogador encontrado com os filtros selecionados
               </div>
@@ -440,7 +397,7 @@ export default function PlayersUnifiedPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {sortedPlayers.map((player) => (
+                    {players.map((player) => (
                       <tr key={player.$id} className="border-b border-slate-800 hover:bg-slate-800/50 transition-colors">
                         <td className="p-3">
                           {player.steamData?.avatar ? (
