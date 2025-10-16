@@ -35,6 +35,7 @@ async function processSingleQuery() {
     [
       Query.equal("status", "pending"),
       Query.lessThanEqual("scheduledFor", now),
+      Query.orderAsc("scheduledFor"),
       Query.limit(1),
     ]
   );
